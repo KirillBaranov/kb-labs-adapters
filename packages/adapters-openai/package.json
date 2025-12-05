@@ -1,0 +1,48 @@
+{
+  "name": "@kb-labs/adapters-openai",
+  "version": "0.1.0",
+  "description": "OpenAI adapter implementing ILLM and IEmbeddings interfaces",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./llm": {
+      "import": "./dist/llm.js",
+      "types": "./dist/llm.d.ts"
+    },
+    "./embeddings": {
+      "import": "./dist/embeddings.js",
+      "types": "./dist/embeddings.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "openai": "^4.104.0"
+  },
+  "peerDependencies": {
+    "@kb-labs/core-platform": "*"
+  },
+  "devDependencies": {
+    "@kb-labs/core-platform": "link:../../../kb-labs-core/packages/core-platform",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

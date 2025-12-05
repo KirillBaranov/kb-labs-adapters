@@ -197,8 +197,16 @@ export class QdrantVectorStore implements IVectorStore {
  * Create Qdrant vector store adapter.
  * This is the factory function called by initPlatform() when loading adapters.
  */
-export function createAdapter(config: QdrantVectorStoreConfig): QdrantVectorStore {
-  return new QdrantVectorStore(config);
+export function createAdapter(config?: QdrantVectorStoreConfig): QdrantVectorStore {
+  const fallbackUrl = process.env.QDRANT_URL ?? 'http://localhost:6333';
+  const finalConfig: QdrantVectorStoreConfig = {
+    url: config?.url ?? fallbackUrl,
+    apiKey: config?.apiKey ?? process.env.QDRANT_API_KEY,
+    collectionName: config?.collectionName,
+    dimension: config?.dimension,
+    timeout: config?.timeout,
+  };
+  return new QdrantVectorStore(finalConfig);
 }
 
 // Default export for direct import

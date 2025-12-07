@@ -156,7 +156,12 @@ export class QdrantVectorStore implements IVectorStore {
   }
 
   async upsert(vectors: VectorRecord[]): Promise<void> {
+    const fs = await import('node:fs/promises');
+    const log = (msg: string) => fs.appendFile('/tmp/platform-vector-debug.log', msg + '\n');
+
+    await log(`[QdrantVectorStore.upsert] START vectors.length=${vectors.length}`);
     await this.ensureCollection();
+    await log(`[QdrantVectorStore.upsert] ensureCollection completed`);
 
     if (vectors.length === 0) return;
 
@@ -165,11 +170,40 @@ export class QdrantVectorStore implements IVectorStore {
       vector: record.vector,
       payload: record.metadata ?? {},
     }));
+    await log(`[QdrantVectorStore.upsert] Converted to ${points.length} points, will batch upsert...`);
 
-    await this.client.upsert(this.collectionName, {
-      wait: true,
-      points,
-    });
+    // Batch upsert (Qdrant supports up to 100 points per request)
+    const batchSize = 100;
+    const totalBatches = Math.ceil(points.length / batchSize);
+    await log(`[QdrantVectorStore.upsert] Starting batched upsert: ${totalBatches} batches of ${batchSize}`);
+
+    for (let i = 0; i < points.length; i += batchSize) {
+      const batch = points.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+
+      await log(`[QdrantVectorStore.upsert] Batch ${batchNum}/${totalBatches}: upserting ${batch.length} points...`);
+
+      if (i === 0 && batch.length > 0 && batch[0]) {
+        await log(`[QdrantVectorStore.upsert] Sample point[0]: ${JSON.stringify({
+          id: batch[0].id,
+          vectorLength: batch[0].vector?.length,
+          payloadKeys: Object.keys(batch[0].payload ?? {})
+        })}`);
+      }
+
+      try {
+        await this.client.upsert(this.collectionName, {
+          wait: true,
+          points: batch,
+        });
+        await log(`[QdrantVectorStore.upsert] Batch ${batchNum}/${totalBatches} completed`);
+      } catch (error) {
+        await log(`[QdrantVectorStore.upsert] ERROR in batch ${batchNum}: ${error instanceof Error ? error.message : String(error)}`);
+        throw error;
+      }
+    }
+
+    await log(`[QdrantVectorStore.upsert] All ${totalBatches} batches completed successfully`);
   }
 
   async delete(ids: string[]): Promise<void> {

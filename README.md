@@ -1,195 +1,296 @@
-# KB Labs Product Template (@kb-labs/product-template)
+# KB Labs Adapters
 
-> **Baseline template for products under the @kb-labs namespace.** Fast bootstrap, unified quality rules, simple publishing, and reusable core.
+> **Adapter implementations for KB Labs ecosystem** — OpenAI, Redis, Qdrant, Pino, Analytics, and File System adapters implementing standard KB Labs interfaces.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-KB%20Public%20v1.1-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-18.18.0+-green.svg)](https://nodejs.org/)
 [![pnpm](https://img.shields.io/badge/pnpm-9.0.0+-orange.svg)](https://pnpm.io/)
 
-## 🎯 Vision
+## 🎯 Overview
 
-KB Labs Product Template is the baseline template for products under the **@kb-labs** namespace. It provides fast bootstrap, unified quality rules, simple publishing, and reusable core utilities.
+KB Labs Adapters is a collection of adapter implementations that integrate external services and systems with the KB Labs platform. Each adapter implements standard KB Labs interfaces, providing a consistent API across different backends.
 
-The project solves the problem of inconsistent project structure and configurations across multiple KB Labs products by providing a unified template with shared configurations, quality rules, and development workflows. Instead of each new project starting from scratch, developers can use this template for consistent structure and tooling.
+### Available Adapters
 
-This project is part of the **@kb-labs** ecosystem and serves as the foundation for all new KB Labs products.
+| Package | Description | Implements |
+|---------|-------------|------------|
+| **@kb-labs/adapters-openai** | OpenAI integration | `ILLM`, `IEmbeddings` |
+| **@kb-labs/adapters-redis** | Redis client | `ICacheAdapter` |
+| **@kb-labs/adapters-qdrant** | Qdrant vector database | `IVectorStore` |
+| **@kb-labs/adapters-pino** | Pino logger | `ILogger` |
+| **@kb-labs/adapters-analytics-file** | File-based analytics | `IAnalytics` |
+| **@kb-labs/adapters-fs** | File system operations | `IFileSystem` |
 
 ## 🚀 Quick Start
 
 ### Installation
 
 ```bash
-# Clone repository
-git clone https://github.com/kirill-baranov/kb-labs-product-template.git
-cd kb-labs-product-template
+# Install specific adapter
+pnpm add @kb-labs/adapters-openai
+pnpm add @kb-labs/adapters-redis
+pnpm add @kb-labs/adapters-qdrant
 
-# Install dependencies
+# Or install from monorepo
+cd kb-labs-adapters
 pnpm install
 ```
 
-### Development
+### Usage Examples
+
+#### OpenAI Adapter
+
+```typescript
+import { OpenAILLM, OpenAIEmbeddings } from '@kb-labs/adapters-openai';
+
+// LLM adapter
+const llm = new OpenAILLM({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'gpt-4-turbo',
+});
+
+const response = await llm.generate({
+  prompt: 'Explain TypeScript generics',
+  temperature: 0.7,
+});
+
+// Embeddings adapter
+const embeddings = new OpenAIEmbeddings({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: 'text-embedding-3-small',
+});
+
+const vectors = await embeddings.embed(['hello world', 'foo bar']);
+```
+
+#### Redis Adapter
+
+```typescript
+import { RedisAdapter } from '@kb-labs/adapters-redis';
+
+const redis = new RedisAdapter({
+  host: 'localhost',
+  port: 6379,
+});
+
+await redis.set('key', 'value', { ttl: 3600 });
+const value = await redis.get('key');
+```
+
+#### Qdrant Adapter
+
+```typescript
+import { QdrantVectorStore } from '@kb-labs/adapters-qdrant';
+
+const vectorStore = new QdrantVectorStore({
+  url: 'http://localhost:6333',
+  collection: 'my-collection',
+});
+
+await vectorStore.upsert([
+  { id: '1', vector: [0.1, 0.2, 0.3], metadata: { text: 'example' } },
+]);
+
+const results = await vectorStore.search([0.1, 0.2, 0.3], { limit: 10 });
+```
+
+#### Pino Logger
+
+```typescript
+import { PinoLogger } from '@kb-labs/adapters-pino';
+
+const logger = new PinoLogger({
+  level: 'info',
+  pretty: process.env.NODE_ENV === 'development',
+});
+
+logger.info({ userId: '123' }, 'User logged in');
+logger.error({ err }, 'Failed to process request');
+```
+
+## 📦 Packages
+
+### [@kb-labs/adapters-openai](./packages/adapters-openai/)
+
+OpenAI API integration providing:
+- **LLM adapter** - Text generation with GPT models
+- **Embeddings adapter** - Vector embeddings with text-embedding models
+- Streaming support
+- Token counting
+- Error handling
+
+### [@kb-labs/adapters-redis](./packages/adapters-redis/)
+
+Redis client adapter providing:
+- Key-value storage
+- TTL support
+- Pipeline operations
+- Pub/sub messaging
+- Connection pooling
+
+### [@kb-labs/adapters-qdrant](./packages/adapters-qdrant/)
+
+Qdrant vector database adapter providing:
+- Vector storage and search
+- Metadata filtering
+- Hybrid search (vector + keyword)
+- Collection management
+- Batch operations
+
+### [@kb-labs/adapters-pino](./packages/adapters-pino/)
+
+Pino logger adapter providing:
+- Structured logging
+- Log levels (trace, debug, info, warn, error, fatal)
+- Child loggers
+- Pretty printing (development)
+- JSON output (production)
+
+### [@kb-labs/adapters-analytics-file](./packages/adapters-analytics-file/)
+
+File-based analytics adapter providing:
+- Event tracking
+- File-based storage
+- JSON format
+- Rotation support
+
+### [@kb-labs/adapters-fs](./packages/adapters-fs/)
+
+File system adapter providing:
+- Read/write operations
+- Directory operations
+- Path utilities
+- Async/promise-based API
+
+## 🏗️ Architecture
+
+All adapters follow the **Adapter Pattern**, implementing standard KB Labs interfaces:
+
+```
+┌─────────────────┐
+│  KB Labs Core   │
+│   Interfaces    │  (ILLM, ILogger, IVectorStore, etc.)
+└────────┬────────┘
+         │
+         │ implements
+         │
+┌────────┴────────┐
+│    Adapters     │
+├─────────────────┤
+│  • OpenAI       │ → OpenAI API
+│  • Redis        │ → Redis Server
+│  • Qdrant       │ → Qdrant API
+│  • Pino         │ → Console/Files
+│  • Analytics    │ → Files
+│  • FS           │ → File System
+└─────────────────┘
+```
+
+### Benefits
+
+- **Swappable implementations** - Change backends without changing code
+- **Testability** - Mock adapters for testing
+- **Consistency** - Same API across different services
+- **Type safety** - TypeScript interfaces enforce contracts
+
+## 🔧 Development
+
+### Prerequisites
+
+- **Node.js** >= 18.18.0
+- **pnpm** >= 9.0.0
+
+### Setup
 
 ```bash
-# Start development mode for all packages
-pnpm dev
+# Clone repository
+git clone https://github.com/kirill-baranov/kb-labs-adapters.git
+cd kb-labs-adapters
+
+# Install dependencies
+pnpm install
 
 # Build all packages
 pnpm build
+```
+
+### Development Workflow
+
+```bash
+# Watch mode (auto-rebuild on changes)
+pnpm dev
 
 # Run tests
 pnpm test
 
+# Run tests with coverage
+pnpm test:coverage
+
 # Lint code
 pnpm lint
+
+# Type check
+pnpm type-check
+
+# Format code
+pnpm format
 ```
 
-### Creating a New Package
+### Creating a New Adapter
 
-```bash
-# Using the CLI tool (recommended)
-pnpm dlx @kb-labs/create-pkg my-new-pkg
+1. Create package directory: `packages/adapters-<name>/`
+2. Implement KB Labs interface (e.g., `ILLM`, `ILogger`)
+3. Add tests
+4. Export from `index.ts`
+5. Update this README
 
-# Or manually copy and modify
-cp -r packages/package-name packages/<new-package-name>
-# Then update metadata and imports
-```
-
-## ✨ Features
-
-- **Fast Bootstrap**: Quick project setup with unified configurations
-- **Unified Quality Rules**: ESLint, Prettier, TypeScript, Vitest, and TSUP configs
-- **Simple Publishing**: Automated releases through Changesets
-- **Reusable Core**: Shared utilities via `@kb-labs/core`
-- **DevKit Integration**: Zero-maintenance configurations via `@kb-labs/devkit`
-- **Multi-Package Support**: pnpm workspaces for monorepo structure
-
-## 📖 Documentation
-
-- 📦 [Naming Convention](./docs/naming-convention.md) - The Pyramid Rule (mandatory!)
-- 📚 [Documentation Guide](./docs/DOCUMENTATION.md) - How to document your product
-- 🏛️ [ADRs](./docs/adr/) - Architecture Decision Records
-
-## 📁 Repository Structure
+Example structure:
 
 ```
-kb-labs-product-template/
-├── apps/                    # Demo applications
-│   └── demo/                # Example app / playground
-├── packages/                # Core packages
-│   └── package-name/        # Example package (lib/cli/adapter)
-├── fixtures/                # Fixtures for snapshot/integration testing
-├── docs/                    # Documentation
-│   ├── naming-convention.md # The Pyramid Rule (NEW!)
-│   ├── DOCUMENTATION.md     # Documentation guide
-│   └── adr/                 # Architecture Decision Records (ADRs)
-└── scripts/                 # Utility scripts
+packages/adapters-example/
+├── src/
+│   ├── index.ts       # Main export
+│   ├── adapter.ts     # Adapter implementation
+│   └── types.ts       # Types and interfaces
+├── test/
+│   └── adapter.test.ts
+├── package.json
+├── tsconfig.json
+└── README.md
 ```
-
-### Directory Descriptions
-
-- **`apps/`** - Demo applications demonstrating product usage
-- **`packages/`** - Core packages (lib, CLI, adapters)
-- **`fixtures/`** - Test fixtures for snapshot and integration testing
-- **`docs/`** - Documentation including ADRs and guides
-
-## 📦 Packages
-
-| Package | Description |
-|---------|-------------|
-| [@kb-labs/package-name](./packages/package-name/) | Example package (replace with your package) |
-
-### Package Details
-
-This template includes a single example package that can be customized for your needs:
-- TypeScript library structure
-- Vitest test setup
-- TSUP build configuration
-- Example source code and tests
-
-## 🛠️ Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `pnpm dev` | Start development mode for all packages |
-| `pnpm build` | Build all packages |
-| `pnpm build:clean` | Clean and build all packages |
-| `pnpm test` | Run all tests |
-| `pnpm test:watch` | Run tests in watch mode |
-| `pnpm lint` | Lint all code |
-| `pnpm lint:fix` | Fix linting issues |
-| `pnpm type-check` | TypeScript type checking |
-| `pnpm check` | Run lint, type-check, and tests |
-| `pnpm ci` | Full CI pipeline (clean, build, check) |
-| `pnpm clean` | Clean build artifacts |
-| `pnpm clean:all` | Clean all node_modules and build artifacts |
-
-### DevKit Commands
-
-| Script | Description |
-|--------|-------------|
-| `pnpm devkit:sync` | Sync DevKit configurations to workspace |
-| `pnpm devkit:check` | Check if DevKit sync is needed |
-| `pnpm devkit:force` | Force DevKit sync (overwrite existing) |
-| `pnpm devkit:help` | Show DevKit sync help |
-
-## 🔧 DevKit Integration
-
-This template uses `@kb-labs/devkit` for shared tooling and configurations. DevKit provides:
-
-- **Unified Configurations**: ESLint, Prettier, TypeScript, Vitest, and TSUP configs
-- **Automatic Sync**: Keeps workspace configs in sync with latest DevKit versions
-- **Zero Maintenance**: No need to manually update config files
-
-### DevKit Commands Usage
-
-- **`pnpm devkit:sync`** - Syncs DevKit configurations to your workspace (runs automatically on `pnpm install`)
-- **`pnpm devkit:check`** - Checks if your workspace configs are up-to-date with DevKit
-- **`pnpm devkit:force`** - Forces sync even if local files exist (overwrites local changes)
-- **`pnpm devkit:help`** - Shows detailed help and available options
-
-For more details, see [ADR-0005: Use DevKit for Shared Tooling](docs/adr/0005-use-devkit-for-shared-tooling.md).
-
-## 📋 Development Policies
-
-- **Code Style**: ESLint + Prettier, TypeScript strict mode
-- **Testing**: Vitest with fixtures for integration testing
-- **Versioning**: SemVer with automated releases through Changesets
-- **Architecture**: Document decisions in ADRs (see `docs/adr/`)
-- **Tooling**: Shared configurations via `@kb-labs/devkit`
-
-## 🔧 Requirements
-
-- **Node.js**: >= 18.18.0
-- **pnpm**: >= 9.0.0
 
 ## 📚 Documentation
 
-- [Documentation Standard](./docs/DOCUMENTATION.md) - Full documentation guidelines
+- [Architecture Decisions](./docs/adr/) - ADRs for this repository
 - [Contributing Guide](./CONTRIBUTING.md) - How to contribute
-- [Architecture Decisions](./docs/adr/) - ADRs for this project
-
-## 🔗 Related Packages
-
-### Dependencies
-
-- [@kb-labs/devkit](https://github.com/KirillBaranov/kb-labs-devkit) - DevKit presets and configurations
-
-### Used By
-
-- All KB Labs projects as a starting template
-
-### Ecosystem
-
-- [KB Labs](https://github.com/KirillBaranov/kb-labs) - Main ecosystem repository
+- Individual package READMEs in `packages/*/README.md`
 
 ## 🤝 Contributing
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines and contribution process.
 
-## 📄 License
+## 🔗 Related Projects
 
-MIT © KB Labs
+### Core Platform
+- [@kb-labs/core](https://github.com/KirillBaranov/kb-labs-core) - Core runtime and utilities
+- [@kb-labs/cli](https://github.com/KirillBaranov/kb-labs-cli) - CLI interface
+- [@kb-labs/plugin](https://github.com/KirillBaranov/kb-labs-plugin) - Plugin system
 
----
+### Integration
+- [@kb-labs/mind](https://github.com/KirillBaranov/kb-labs-mind) - AI-powered code search (uses OpenAI, Qdrant adapters)
+- [@kb-labs/workflow](https://github.com/KirillBaranov/kb-labs-workflow) - Workflow engine (uses Redis adapter)
+- [@kb-labs/analytics](https://github.com/KirillBaranov/kb-labs-analytics) - Analytics (uses analytics-file adapter)
 
-**See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines and contribution process.**
+## License
+
+KB Public License v1.1 - see [LICENSE](LICENSE) for details.
+
+This is open source software with some restrictions on:
+- Offering as a hosted service (SaaS/PaaS)
+- Creating competing platform products
+
+For commercial licensing inquiries: contact@kblabs.dev
+
+**User Guides:**
+- [English Guide](../LICENSE-GUIDE.en.md)
+- [Русское руководство](../LICENSE-GUIDE.ru.md)

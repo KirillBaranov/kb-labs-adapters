@@ -78,3 +78,14 @@ export class OpenAIEmbeddings implements IEmbeddings {
     return sorted.map((item) => item.embedding);
   }
 }
+
+/**
+ * Create OpenAI embeddings adapter.
+ * This is the factory function called by initPlatform() when loading adapters.
+ */
+export function createAdapter(config?: OpenAIEmbeddingsConfig): OpenAIEmbeddings {
+  return new OpenAIEmbeddings(config);
+}
+
+// Default export for direct import
+export default createAdapter;

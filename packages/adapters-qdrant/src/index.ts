@@ -71,8 +71,17 @@ export class QdrantVectorStore implements IVectorStore {
   private collectionName: string;
   private dimension: number;
   private initialized = false;
+  private url: string;
 
   constructor(config: QdrantVectorStoreConfig) {
+    console.error(`\n========== QdrantVectorStore.constructor ==========`);
+    console.error(`url=${config.url}`);
+    console.error(`collectionName=${config.collectionName ?? 'kb-vectors'}`);
+    console.error(`Stack trace:`);
+    console.error(new Error().stack);
+    console.error(`===================================================\n`);
+
+    this.url = config.url;
     this.client = new QdrantClient({
       url: config.url,
       apiKey: config.apiKey,
@@ -107,6 +116,11 @@ export class QdrantVectorStore implements IVectorStore {
 
       this.initialized = true;
     } catch (error) {
+      // DEBUG: Log full error
+      console.error('[QdrantVectorStore.ensureCollection] ERROR:', error);
+      console.error('[QdrantVectorStore.ensureCollection] Error type:', error?.constructor?.name);
+      console.error('[QdrantVectorStore.ensureCollection] Error stack:', error instanceof Error ? error.stack : 'no stack');
+
       throw new Error(
         `Failed to initialize Qdrant collection: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -119,6 +133,15 @@ export class QdrantVectorStore implements IVectorStore {
     filter?: VectorFilter,
   ): Promise<VectorSearchResult[]> {
     await this.ensureCollection();
+
+    const fs = await import('node:fs/promises');
+    const log = (msg: string) => fs.appendFile('/tmp/qdrant-search-debug.log', msg + '\n');
+
+    await log(`[QdrantVectorStore.search] START`);
+    await log(`[QdrantVectorStore.search] collection=${this.collectionName}`);
+    await log(`[QdrantVectorStore.search] vectorLength=${query.length}`);
+    await log(`[QdrantVectorStore.search] limit=${limit}`);
+    await log(`[QdrantVectorStore.search] filter=${JSON.stringify(filter)}`);
 
     // Build Qdrant filter if provided
     const qdrantFilter = filter
@@ -141,18 +164,29 @@ export class QdrantVectorStore implements IVectorStore {
         }
       : undefined;
 
-    const response = await this.client.search(this.collectionName, {
-      vector: query,
-      limit,
-      filter: qdrantFilter,
-      with_payload: true,
-    });
+    await log(`[QdrantVectorStore.search] qdrantFilter=${JSON.stringify(qdrantFilter)}`);
+    await log(`[QdrantVectorStore.search] About to call client.search...`);
 
-    return response.map((point) => ({
-      id: String(point.id),
-      score: point.score,
-      metadata: point.payload as Record<string, unknown> | undefined,
-    }));
+    try {
+      const response = await this.client.search(this.collectionName, {
+        vector: query,
+        limit,
+        filter: qdrantFilter,
+        with_payload: true,
+      });
+
+      await log(`[QdrantVectorStore.search] SUCCESS: got ${response.length} results`);
+
+      return response.map((point) => ({
+        id: String(point.id),
+        score: point.score,
+        metadata: point.payload as Record<string, unknown> | undefined,
+      }));
+    } catch (error) {
+      await log(`[QdrantVectorStore.search] ERROR: ${error instanceof Error ? error.message : String(error)}`);
+      await log(`[QdrantVectorStore.search] ERROR stack: ${error instanceof Error ? error.stack : 'no stack'}`);
+      throw error;
+    }
   }
 
   async upsert(vectors: VectorRecord[]): Promise<void> {

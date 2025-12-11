@@ -77,6 +77,14 @@ export class OpenAIEmbeddings implements IEmbeddings {
     const sorted = response.data.sort((a, b) => a.index - b.index);
     return sorted.map((item) => item.embedding);
   }
+
+  /**
+   * Get the dimensions of the embeddings.
+   * This method is needed for IPC/Unix Socket transport to access the dimensions property.
+   */
+  async getDimensions(): Promise<number> {
+    return this.dimensions;
+  }
 }
 
 /**

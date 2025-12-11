@@ -73,14 +73,12 @@ export class QdrantVectorStore implements IVectorStore {
   private initialized = false;
   private url: string;
 
-  constructor(config: QdrantVectorStoreConfig) {
-    console.error(`\n========== QdrantVectorStore.constructor ==========`);
-    console.error(`url=${config.url}`);
-    console.error(`collectionName=${config.collectionName ?? 'kb-vectors'}`);
-    console.error(`Stack trace:`);
-    console.error(new Error().stack);
-    console.error(`===================================================\n`);
+  // Adaptive concurrency state
+  private concurrency = 3; // Start with 3 parallel batches
+  private consecutiveErrors = 0;
+  private consecutiveSuccesses = 0;
 
+  constructor(config: QdrantVectorStoreConfig) {
     this.url = config.url;
     this.client = new QdrantClient({
       url: config.url,
@@ -116,11 +114,6 @@ export class QdrantVectorStore implements IVectorStore {
 
       this.initialized = true;
     } catch (error) {
-      // DEBUG: Log full error
-      console.error('[QdrantVectorStore.ensureCollection] ERROR:', error);
-      console.error('[QdrantVectorStore.ensureCollection] Error type:', error?.constructor?.name);
-      console.error('[QdrantVectorStore.ensureCollection] Error stack:', error instanceof Error ? error.stack : 'no stack');
-
       throw new Error(
         `Failed to initialize Qdrant collection: ${error instanceof Error ? error.message : String(error)}`,
       );
@@ -133,15 +126,6 @@ export class QdrantVectorStore implements IVectorStore {
     filter?: VectorFilter,
   ): Promise<VectorSearchResult[]> {
     await this.ensureCollection();
-
-    const fs = await import('node:fs/promises');
-    const log = (msg: string) => fs.appendFile('/tmp/qdrant-search-debug.log', msg + '\n');
-
-    await log(`[QdrantVectorStore.search] START`);
-    await log(`[QdrantVectorStore.search] collection=${this.collectionName}`);
-    await log(`[QdrantVectorStore.search] vectorLength=${query.length}`);
-    await log(`[QdrantVectorStore.search] limit=${limit}`);
-    await log(`[QdrantVectorStore.search] filter=${JSON.stringify(filter)}`);
 
     // Build Qdrant filter if provided
     const qdrantFilter = filter
@@ -164,38 +148,22 @@ export class QdrantVectorStore implements IVectorStore {
         }
       : undefined;
 
-    await log(`[QdrantVectorStore.search] qdrantFilter=${JSON.stringify(qdrantFilter)}`);
-    await log(`[QdrantVectorStore.search] About to call client.search...`);
+    const response = await this.client.search(this.collectionName, {
+      vector: query,
+      limit,
+      filter: qdrantFilter,
+      with_payload: true,
+    });
 
-    try {
-      const response = await this.client.search(this.collectionName, {
-        vector: query,
-        limit,
-        filter: qdrantFilter,
-        with_payload: true,
-      });
-
-      await log(`[QdrantVectorStore.search] SUCCESS: got ${response.length} results`);
-
-      return response.map((point) => ({
-        id: String(point.id),
-        score: point.score,
-        metadata: point.payload as Record<string, unknown> | undefined,
-      }));
-    } catch (error) {
-      await log(`[QdrantVectorStore.search] ERROR: ${error instanceof Error ? error.message : String(error)}`);
-      await log(`[QdrantVectorStore.search] ERROR stack: ${error instanceof Error ? error.stack : 'no stack'}`);
-      throw error;
-    }
+    return response.map((point) => ({
+      id: String(point.id),
+      score: point.score,
+      metadata: point.payload as Record<string, unknown> | undefined,
+    }));
   }
 
   async upsert(vectors: VectorRecord[]): Promise<void> {
-    const fs = await import('node:fs/promises');
-    const log = (msg: string) => fs.appendFile('/tmp/platform-vector-debug.log', msg + '\n');
-
-    await log(`[QdrantVectorStore.upsert] START vectors.length=${vectors.length}`);
     await this.ensureCollection();
-    await log(`[QdrantVectorStore.upsert] ensureCollection completed`);
 
     if (vectors.length === 0) return;
 
@@ -204,40 +172,60 @@ export class QdrantVectorStore implements IVectorStore {
       vector: record.vector,
       payload: record.metadata ?? {},
     }));
-    await log(`[QdrantVectorStore.upsert] Converted to ${points.length} points, will batch upsert...`);
 
-    // Batch upsert (Qdrant supports up to 100 points per request)
+    // Batch upsert with adaptive parallel processing (Qdrant supports up to 100 points per request)
     const batchSize = 100;
     const totalBatches = Math.ceil(points.length / batchSize);
-    await log(`[QdrantVectorStore.upsert] Starting batched upsert: ${totalBatches} batches of ${batchSize}`);
 
+    // Create all batches
+    type QdrantPoint = { id: string; vector: number[]; payload: Record<string, unknown> };
+    const batches: QdrantPoint[][] = [];
     for (let i = 0; i < points.length; i += batchSize) {
-      const batch = points.slice(i, i + batchSize);
-      const batchNum = Math.floor(i / batchSize) + 1;
-
-      await log(`[QdrantVectorStore.upsert] Batch ${batchNum}/${totalBatches}: upserting ${batch.length} points...`);
-
-      if (i === 0 && batch.length > 0 && batch[0]) {
-        await log(`[QdrantVectorStore.upsert] Sample point[0]: ${JSON.stringify({
-          id: batch[0].id,
-          vectorLength: batch[0].vector?.length,
-          payloadKeys: Object.keys(batch[0].payload ?? {})
-        })}`);
-      }
-
-      try {
-        await this.client.upsert(this.collectionName, {
-          wait: true,
-          points: batch,
-        });
-        await log(`[QdrantVectorStore.upsert] Batch ${batchNum}/${totalBatches} completed`);
-      } catch (error) {
-        await log(`[QdrantVectorStore.upsert] ERROR in batch ${batchNum}: ${error instanceof Error ? error.message : String(error)}`);
-        throw error;
-      }
+      batches.push(points.slice(i, i + batchSize) as QdrantPoint[]);
     }
 
-    await log(`[QdrantVectorStore.upsert] All ${totalBatches} batches completed successfully`);
+    // Process batches with adaptive concurrency
+    let batchIndex = 0;
+    while (batchIndex < batches.length) {
+      const currentConcurrency = Math.min(this.concurrency, batches.length - batchIndex);
+      const batchGroup = batches.slice(batchIndex, batchIndex + currentConcurrency);
+
+      const batchPromises = batchGroup.map(async (batch) => {
+        try {
+          await this.client.upsert(this.collectionName, {
+            wait: false, // ⚡ Don't wait for indexing - let Qdrant index asynchronously
+            points: batch,
+          });
+
+          // Success: increase concurrency gradually
+          this.consecutiveErrors = 0;
+          this.consecutiveSuccesses++;
+          if (this.consecutiveSuccesses >= 5 && this.concurrency < 10) {
+            this.concurrency++;
+            this.consecutiveSuccesses = 0;
+          }
+        } catch (error) {
+          // Error: decrease concurrency for graceful degradation
+          this.consecutiveSuccesses = 0;
+          this.consecutiveErrors++;
+          if (this.consecutiveErrors >= 2 && this.concurrency > 1) {
+            this.concurrency = Math.max(1, Math.floor(this.concurrency / 2));
+            this.consecutiveErrors = 0;
+          }
+
+          throw error;
+        }
+      });
+
+      // Wait for this group of concurrent batches to complete
+      try {
+        await Promise.all(batchPromises);
+        batchIndex += batchGroup.length;
+      } catch (error) {
+        // If group fails, retry with reduced concurrency (already adjusted above)
+        // Don't increment batchIndex - retry same batches
+      }
+    }
   }
 
   async delete(ids: string[]): Promise<void> {
@@ -248,7 +236,7 @@ export class QdrantVectorStore implements IVectorStore {
     const uuids = ids.map(stringToUUID);
 
     await this.client.delete(this.collectionName, {
-      wait: true,
+      wait: false, // ⚡ Don't wait for indexing - let Qdrant process asynchronously
       points: uuids,
     });
   }
@@ -258,6 +246,74 @@ export class QdrantVectorStore implements IVectorStore {
 
     const info = await this.client.getCollection(this.collectionName);
     return info.points_count ?? 0;
+  }
+
+  /**
+   * Get vectors by IDs (implements optional IVectorStore method).
+   * @param ids - Array of vector IDs to retrieve
+   * @returns Array of vector records
+   */
+  async get(ids: string[]): Promise<VectorRecord[]> {
+    await this.ensureCollection();
+
+    if (ids.length === 0) return [];
+
+    const response = await this.client.retrieve(this.collectionName, {
+      ids: ids.map((id) => stringToUUID(id)),
+      with_vector: true,
+      with_payload: true,
+    });
+
+    return response.map((point) => ({
+      id: String(point.id),
+      vector: point.vector as number[],
+      metadata: point.payload as Record<string, unknown> | undefined,
+    }));
+  }
+
+  /**
+   * Query vectors by metadata filter (implements optional IVectorStore method).
+   * @param filter - Metadata filter to apply
+   * @returns Array of matching vector records
+   */
+  async query(filter: VectorFilter): Promise<VectorRecord[]> {
+    await this.ensureCollection();
+
+    // Qdrant scroll API for querying by metadata
+    const response = await this.client.scroll(this.collectionName, {
+      filter: this.convertFilter(filter),
+      with_vector: true,
+      with_payload: true,
+      limit: 10000, // Max limit for bulk retrieval
+    });
+
+    return response.points.map((point) => ({
+      id: String(point.id),
+      vector: point.vector as number[],
+      metadata: point.payload as Record<string, unknown> | undefined,
+    }));
+  }
+
+  /**
+   * Convert platform VectorFilter to Qdrant filter format.
+   */
+  private convertFilter(filter: VectorFilter): any {
+    const fieldParts = filter.field.split('.');
+    const fieldName = fieldParts[fieldParts.length - 1]; // Get last part after dots
+
+    switch (filter.operator) {
+      case 'eq':
+        return { must: [{ key: fieldName, match: { value: filter.value } }] };
+      case 'ne':
+        return { must_not: [{ key: fieldName, match: { value: filter.value } }] };
+      case 'in':
+        return { must: [{ key: fieldName, match: { any: filter.value as any[] } }] };
+      case 'nin':
+        return { must_not: [{ key: fieldName, match: { any: filter.value as any[] } }] };
+      default:
+        // For gt/gte/lt/lte - use range filter
+        return { must: [{ key: fieldName, range: { [filter.operator]: filter.value } }] };
+    }
   }
 }
 

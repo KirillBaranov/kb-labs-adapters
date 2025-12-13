@@ -94,6 +94,10 @@ export class PinoLoggerAdapter implements ILogger {
     this.pino.debug(meta ?? {}, message);
   }
 
+  trace(message: string, meta?: Record<string, unknown>): void {
+    this.pino.trace(meta ?? {}, message);
+  }
+
   child(bindings: Record<string, unknown>): ILogger {
     const childPino = this.pino.child(bindings);
     return this.constructor_child(childPino);

@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters-qdrant",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Qdrant adapter implementing IVectorStore interface",
   "type": "module",
   "main": "./dist/index.js",

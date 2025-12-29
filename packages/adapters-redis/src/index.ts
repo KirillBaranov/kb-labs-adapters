@@ -96,6 +96,40 @@ export class RedisCacheAdapter implements ICache {
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // Sorted Set Operations
+  // ═══════════════════════════════════════════════════════════════════════
+
+  async zadd(key: string, score: number, member: string): Promise<void> {
+    await this.client.zadd(key, score, member);
+  }
+
+  async zrangebyscore(key: string, min: number, max: number): Promise<string[]> {
+    return this.client.zrangebyscore(key, min, max);
+  }
+
+  async zrem(key: string, member: string): Promise<void> {
+    await this.client.zrem(key, member);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Atomic Operations
+  // ═══════════════════════════════════════════════════════════════════════
+
+  async setIfNotExists<T>(key: string, value: T, ttl?: number): Promise<boolean> {
+    const serialized = JSON.stringify(value);
+
+    if (ttl !== undefined) {
+      // SET key value PX milliseconds NX
+      const result = await this.client.set(key, serialized, 'PX', ttl, 'NX');
+      return result === 'OK';
+    } else {
+      // SET key value NX (no TTL)
+      const result = await this.client.set(key, serialized, 'NX');
+      return result === 'OK';
+    }
+  }
+
   /**
    * Close Redis connection.
    * Call this on app shutdown.

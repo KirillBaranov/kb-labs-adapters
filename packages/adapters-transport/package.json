@@ -33,5 +33,6 @@
     "unix-socket"
   ],
   "author": "KB Labs",
-  "license": "MIT"
+  "license": "MIT",
+  "private": true
 }

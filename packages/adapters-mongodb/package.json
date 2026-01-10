@@ -1,0 +1,45 @@
+{
+  "name": "@kb-labs/adapters-mongodb",
+  "version": "0.1.0",
+  "description": "MongoDB adapter implementing IDocumentDatabase interface",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./secure-document": {
+      "import": "./dist/secure-document.js",
+      "types": "./dist/secure-document.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "mongodb": "^6.12.0"
+  },
+  "peerDependencies": {
+    "@kb-labs/core-platform": "*"
+  },
+  "devDependencies": {
+    "@kb-labs/core-platform": "link:../../../kb-labs-core/packages/core-platform",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  },
+  "private": true
+}

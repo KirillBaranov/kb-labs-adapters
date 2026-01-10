@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./secure-storage": {
+      "import": "./dist/secure-storage.js",
+      "types": "./dist/secure-storage.d.ts"
     }
   },
   "files": [

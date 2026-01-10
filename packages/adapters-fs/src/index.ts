@@ -20,7 +20,7 @@
 import fs from 'fs-extra';
 import path from 'node:path';
 import fg from 'fast-glob';
-import type { IStorage } from '@kb-labs/core-platform';
+import type { IStorage, StorageMetadata } from '@kb-labs/core-platform/adapters';
 
 /**
  * Configuration for filesystem storage adapter.
@@ -95,10 +95,8 @@ export class FilesystemStorageAdapter implements IStorage {
   }
 
   async list(prefix: string): Promise<string[]> {
-    const absolutePrefix = this.resolvePath(prefix);
-
-    // Use fast-glob for efficient file listing
-    const pattern = path.join(absolutePrefix, '**/*');
+    // List files with a given prefix in their name
+    const pattern = `${prefix}*`;
     const files = await fg(pattern, {
       onlyFiles: true,
       absolute: false,
@@ -117,6 +115,124 @@ export class FilesystemStorageAdapter implements IStorage {
     } catch {
       return false;
     }
+  }
+
+  // ============================================================================
+  // EXTENDED METHODS (optional - implements IStorage extended interface)
+  // ============================================================================
+
+  /**
+   * Get file metadata (size, mtime, etc).
+   * Optional method - implements IStorage.stat().
+   */
+  async stat(filepath: string): Promise<StorageMetadata | null> {
+    const absolutePath = this.resolvePath(filepath);
+
+    try {
+      const stats = await fs.stat(absolutePath);
+
+      return {
+        path: filepath,
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+        contentType: this.guessContentType(filepath),
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Copy file within storage.
+   * Optional method - implements IStorage.copy().
+   */
+  async copy(sourcePath: string, destPath: string): Promise<void> {
+    const absoluteSource = this.resolvePath(sourcePath);
+    const absoluteDest = this.resolvePath(destPath);
+
+    // Ensure destination directory exists
+    await fs.ensureDir(path.dirname(absoluteDest));
+
+    await fs.copyFile(absoluteSource, absoluteDest);
+  }
+
+  /**
+   * Move file within storage.
+   * Optional method - implements IStorage.move().
+   */
+  async move(sourcePath: string, destPath: string): Promise<void> {
+    const absoluteSource = this.resolvePath(sourcePath);
+    const absoluteDest = this.resolvePath(destPath);
+
+    // Ensure destination directory exists
+    await fs.ensureDir(path.dirname(absoluteDest));
+
+    await fs.move(absoluteSource, absoluteDest, { overwrite: true });
+  }
+
+  /**
+   * List files with metadata.
+   * Optional method - implements IStorage.listWithMetadata().
+   */
+  async listWithMetadata(prefix: string): Promise<StorageMetadata[]> {
+    // List files with a given prefix in their name
+    const pattern = `${prefix}*`;
+    const files = await fg(pattern, {
+      onlyFiles: true,
+      absolute: true,
+      cwd: this.baseDir,
+      stats: true,
+    });
+
+    const results: StorageMetadata[] = [];
+
+    for (const entry of files) {
+      if (typeof entry === 'string') continue; // Skip if no stats
+
+      const stats = entry.stats;
+      if (!stats) continue;
+
+      // Convert absolute path back to relative
+      const relativePath = path.relative(this.baseDir, entry.path);
+
+      results.push({
+        path: relativePath,
+        size: stats.size,
+        lastModified: stats.mtime.toISOString(),
+        contentType: this.guessContentType(relativePath),
+      });
+    }
+
+    return results;
+  }
+
+  /**
+   * Guess content type from file extension.
+   * Simple implementation - can be extended with mime-types library.
+   */
+  private guessContentType(filepath: string): string {
+    const ext = path.extname(filepath).toLowerCase();
+    const mimeTypes: Record<string, string> = {
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+      '.json': 'application/json',
+      '.js': 'application/javascript',
+      '.ts': 'application/typescript',
+      '.html': 'text/html',
+      '.css': 'text/css',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.svg': 'image/svg+xml',
+      '.pdf': 'application/pdf',
+      '.zip': 'application/zip',
+    };
+
+    return mimeTypes[ext] ?? 'application/octet-stream';
   }
 }
 

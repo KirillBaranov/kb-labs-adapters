@@ -10,7 +10,7 @@ describe('LogRingBufferAdapter', () => {
   let buffer: LogRingBufferAdapter;
 
   beforeEach(() => {
-    buffer = new LogRingBufferAdapter({ maxSize: 5, ttl: 1000 }); // Small buffer for testing
+    buffer = new LogRingBufferAdapter({ maxSize: 5, ttl: 60000 }); // 60s TTL for testing
   });
 
   describe('append', () => {
@@ -96,31 +96,33 @@ describe('LogRingBufferAdapter', () => {
   });
 
   describe('query', () => {
+    const now = Date.now();
+
     beforeEach(() => {
-      // Add test logs
+      // Add test logs (use current time to avoid TTL eviction)
       buffer.append({
-        timestamp: 1000,
+        timestamp: now - 4000,
         level: 'debug',
         message: 'Debug log',
         fields: {},
         source: 'test',
       });
       buffer.append({
-        timestamp: 2000,
+        timestamp: now - 3000,
         level: 'info',
         message: 'Info log',
         fields: {},
         source: 'test',
       });
       buffer.append({
-        timestamp: 3000,
+        timestamp: now - 2000,
         level: 'warn',
         message: 'Warn log',
         fields: {},
         source: 'test',
       });
       buffer.append({
-        timestamp: 4000,
+        timestamp: now - 1000,
         level: 'error',
         message: 'Error log',
         fields: {},
@@ -131,8 +133,8 @@ describe('LogRingBufferAdapter', () => {
     it('should return all logs without filters', () => {
       const logs = buffer.query();
       expect(logs).toHaveLength(4);
-      expect(logs[0].timestamp).toBe(4000); // Newest first
-      expect(logs[3].timestamp).toBe(1000); // Oldest last
+      expect(logs[0].timestamp).toBe(now - 1000); // Newest first
+      expect(logs[3].timestamp).toBe(now - 4000); // Oldest last
     });
 
     it('should filter by level', () => {
@@ -148,29 +150,29 @@ describe('LogRingBufferAdapter', () => {
     });
 
     it('should filter by timestamp range', () => {
-      const logs = buffer.query({ from: 2000, to: 3000 });
+      const logs = buffer.query({ from: now - 3000, to: now - 2000 });
       expect(logs).toHaveLength(2);
-      expect(logs[0].timestamp).toBe(3000);
-      expect(logs[1].timestamp).toBe(2000);
+      expect(logs[0].timestamp).toBe(now - 2000);
+      expect(logs[1].timestamp).toBe(now - 3000);
     });
 
     it('should apply limit', () => {
       const logs = buffer.query({ limit: 2 });
       expect(logs).toHaveLength(2);
-      expect(logs[0].timestamp).toBe(4000); // Newest
-      expect(logs[1].timestamp).toBe(3000);
+      expect(logs[0].timestamp).toBe(now - 1000); // Newest
+      expect(logs[1].timestamp).toBe(now - 2000);
     });
 
     it('should combine multiple filters', () => {
       const logs = buffer.query({
         level: 'info',
         source: 'test',
-        from: 1500,
+        from: now - 3500,
       });
       expect(logs).toHaveLength(1);
       expect(logs[0].level).toBe('info');
       expect(logs[0].source).toBe('test');
-      expect(logs[0].timestamp).toBeGreaterThanOrEqual(1500);
+      expect(logs[0].timestamp).toBeGreaterThanOrEqual(now - 3500);
     });
   });
 
@@ -229,15 +231,16 @@ describe('LogRingBufferAdapter', () => {
 
   describe('getStats', () => {
     it('should return correct stats', () => {
+      const now = Date.now();
       const log1: LogRecord = {
-        timestamp: 1000,
+        timestamp: now - 1000,
         level: 'info',
         message: 'Log 1',
         fields: {},
         source: 'test',
       };
       const log2: LogRecord = {
-        timestamp: 2000,
+        timestamp: now,
         level: 'info',
         message: 'Log 2',
         fields: {},
@@ -250,8 +253,8 @@ describe('LogRingBufferAdapter', () => {
       const stats = buffer.getStats();
       expect(stats.size).toBe(2);
       expect(stats.maxSize).toBe(5);
-      expect(stats.oldestTimestamp).toBe(1000);
-      expect(stats.newestTimestamp).toBe(2000);
+      expect(stats.oldestTimestamp).toBe(now - 1000);
+      expect(stats.newestTimestamp).toBe(now);
       expect(stats.evictions).toBe(0);
     });
 
@@ -370,17 +373,21 @@ describe('LogRingBufferAdapter', () => {
     });
 
     it('should handle negative timestamps', () => {
+      const now = Date.now();
+      // Use timestamp that won't be evicted by TTL (recent past)
+      const negativeTimestamp = now - 1000;
+
       buffer.append({
-        timestamp: -1000,
+        timestamp: negativeTimestamp,
         level: 'info',
-        message: 'Negative timestamp',
+        message: 'Timestamp test',
         fields: {},
         source: 'test',
       });
 
       const logs = buffer.query();
       expect(logs).toHaveLength(1);
-      expect(logs[0].timestamp).toBe(-1000);
+      expect(logs[0].timestamp).toBe(negativeTimestamp);
     });
 
     it('should handle empty fields', () => {

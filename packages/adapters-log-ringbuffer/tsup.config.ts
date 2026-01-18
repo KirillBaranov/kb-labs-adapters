@@ -1,9 +1,13 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts'],
+  entry: ['src/index.ts', 'src/manifest.ts'],
   format: ['esm'],
-  dts: true,
+  dts: {
+    compilerOptions: {
+      skipLibCheck: true,
+    },
+  },
   clean: true,
   external: ['@kb-labs/core-platform'],
   treeshake: true,

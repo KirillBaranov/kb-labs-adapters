@@ -47,6 +47,9 @@ import type {
   LogQuery,
 } from '@kb-labs/core-platform/adapters';
 
+// Re-export manifest
+export { manifest } from './manifest.js';
+
 /**
  * In-memory ring buffer for log streaming.
  *

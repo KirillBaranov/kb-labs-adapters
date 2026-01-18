@@ -28,6 +28,9 @@ import type {
   VectorSearchResult,
   VectorFilter,
 } from '@kb-labs/core-platform';
+
+// Re-export manifest
+export { manifest } from './manifest.js';
 import { createHash } from 'node:crypto';
 
 /**

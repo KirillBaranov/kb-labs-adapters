@@ -4,7 +4,16 @@
  */
 
 import OpenAI from 'openai';
-import type { ILLM, LLMOptions, LLMResponse } from '@kb-labs/core-platform';
+import type {
+  ILLM,
+  LLMOptions,
+  LLMResponse,
+  LLMMessage,
+  LLMToolCallOptions,
+  LLMToolCallResponse,
+  LLMTool,
+  LLMToolCall,
+} from '@kb-labs/core-platform';
 
 /**
  * Configuration for OpenAI LLM adapter.
@@ -97,4 +106,111 @@ export class OpenAILLM implements ILLM {
       }
     }
   }
+
+  /**
+   * Chat with native tool calling support.
+   * Uses OpenAI's native function calling API.
+   */
+  async chatWithTools(
+    messages: LLMMessage[],
+    options: LLMToolCallOptions
+  ): Promise<LLMToolCallResponse> {
+    const model = options?.model ?? this.defaultModel;
+
+    // Convert LLMMessage[] to OpenAI format
+    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = messages.map((msg) => {
+      if (msg.role === 'tool') {
+        return {
+          role: 'tool' as const,
+          content: msg.content,
+          tool_call_id: msg.toolCallId || '',
+        };
+      }
+      return {
+        role: msg.role as 'system' | 'user' | 'assistant',
+        content: msg.content,
+      };
+    });
+
+    // Convert LLMTool[] to OpenAI tools format
+    const tools: OpenAI.ChatCompletionTool[] = options.tools.map((tool: LLMTool) => ({
+      type: 'function' as const,
+      function: {
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+      },
+    }));
+
+    // Convert tool choice
+    let tool_choice: OpenAI.ChatCompletionToolChoiceOption | undefined;
+    if (options.toolChoice === 'auto') {
+      tool_choice = 'auto';
+    } else if (options.toolChoice === 'required') {
+      tool_choice = 'required';
+    } else if (options.toolChoice === 'none') {
+      tool_choice = 'none';
+    } else if (options.toolChoice && typeof options.toolChoice === 'object') {
+      tool_choice = {
+        type: 'function',
+        function: { name: options.toolChoice.function.name },
+      };
+    }
+
+    // Call OpenAI API
+    const response = await this.client.chat.completions.create({
+      model,
+      messages: openaiMessages,
+      tools,
+      tool_choice,
+      temperature: options?.temperature,
+      max_tokens: options?.maxTokens,
+      stop: options?.stop,
+    });
+
+    const choice = response.choices[0];
+    const content = choice?.message?.content ?? '';
+
+    // Extract tool calls if any
+    const toolCalls: LLMToolCall[] = [];
+    if (choice?.message?.tool_calls) {
+      for (const tc of choice.message.tool_calls) {
+        try {
+          const input = JSON.parse(tc.function.arguments);
+          toolCalls.push({
+            id: tc.id,
+            name: tc.function.name,
+            input,
+          });
+        } catch (error) {
+          // Failed to parse tool arguments - skip this tool call
+          console.warn('Failed to parse tool arguments', {
+            toolName: tc.function.name,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    return {
+      content,
+      usage: {
+        promptTokens: response.usage?.prompt_tokens ?? 0,
+        completionTokens: response.usage?.completion_tokens ?? 0,
+      },
+      model: response.model,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+    };
+  }
 }
+
+/**
+ * Create OpenAI LLM adapter.
+ * This is the factory function called by initPlatform() when loading adapters.
+ */
+export function createAdapter(config?: OpenAILLMConfig): OpenAILLM {
+  return new OpenAILLM(config);
+}
+
+// Default export for direct import
+export default createAdapter;

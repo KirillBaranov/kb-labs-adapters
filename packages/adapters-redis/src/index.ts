@@ -21,6 +21,9 @@
 import Redis, { type RedisOptions } from 'ioredis';
 import type { ICache } from '@kb-labs/core-platform';
 
+// Re-export manifest
+export { manifest } from './manifest.js';
+
 /**
  * Configuration for Redis cache adapter.
  */

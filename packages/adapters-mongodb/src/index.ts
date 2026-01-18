@@ -42,6 +42,9 @@ import type {
   FindOptions,
 } from '@kb-labs/core-platform/adapters';
 
+// Re-export manifest
+export { manifest } from './manifest.js';
+
 /**
  * Configuration for MongoDB adapter.
  */

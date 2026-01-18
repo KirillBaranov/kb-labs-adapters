@@ -34,11 +34,16 @@
  */
 
 import Database from 'better-sqlite3';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import type {
   ISQLDatabase,
   SQLQueryResult,
   SQLTransaction,
 } from '@kb-labs/core-platform/adapters';
+
+// Re-export manifest
+export { manifest } from './manifest.js';
 
 /**
  * Configuration for SQLite database adapter.
@@ -86,6 +91,12 @@ export class SQLiteAdapter implements ISQLDatabase {
   private closed = false;
 
   constructor(config: SQLiteConfig) {
+    // Create parent directory if it doesn't exist (unless :memory:)
+    if (config.filename !== ':memory:' && !config.readonly) {
+      const dir = dirname(config.filename);
+      mkdirSync(dir, { recursive: true });
+    }
+
     this.db = new Database(config.filename, {
       readonly: config.readonly ?? false,
       fileMustExist: false, // Create if not exists

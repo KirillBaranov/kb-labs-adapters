@@ -20,9 +20,12 @@
  */
 
 import pino, { type Logger as PinoLoggerInstance } from 'pino';
-import { Writable } from 'node:stream';
-import type { ILogger, ILogBuffer, LogLevel, LogRecord } from '@kb-labs/core-platform';
+import type { ILogger, ILogBuffer, LogRecord } from '@kb-labs/core-platform';
+import { generateLogId } from '@kb-labs/core-platform/adapters';
 import { LogRingBuffer } from './log-ring-buffer';
+
+// Re-export manifest
+export { manifest } from './manifest.js';
 
 /**
  * Configuration for log streaming/buffering
@@ -56,6 +59,7 @@ export interface PinoLoggerConfig {
 export class PinoLoggerAdapter implements ILogger {
   private pino: PinoLoggerInstance;
   private logBuffer?: LogRingBuffer;
+  private logCallbacks = new Set<(record: LogRecord) => void>();
 
   constructor(config: PinoLoggerConfig = {}) {
     // Resolve log level with priority: ENV var > config.level > 'info'
@@ -88,67 +92,29 @@ export class PinoLoggerAdapter implements ILogger {
     // Merge options, but transport from config.options takes precedence
     const finalTransport = config.options?.transport ?? transport;
 
-    // Create multi-stream if buffer is enabled
-    if (this.logBuffer) {
-      const streams: pino.StreamEntry[] = [
-        { level: resolvedLevel, stream: process.stdout },
-        { level: resolvedLevel, stream: this.createBufferStream() },
-      ];
-
-      this.pino = pino(
-        {
-          level: resolvedLevel,
-          ...config.options,
-        },
-        pino.multistream(streams)
-      );
-    } else {
-      this.pino = pino({
-        level: resolvedLevel,
-        ...config.options,
-        transport: finalTransport,
-      });
-    }
-  }
-
-  /**
-   * Create writable stream that feeds into log buffer
-   */
-  private createBufferStream(): Writable {
-    return new Writable({
-      write: (chunk, encoding, callback) => {
-        try {
-          const logLine = chunk.toString();
-          const parsed = JSON.parse(logLine);
-
-          // Convert Pino log to LogRecord
-          const record: LogRecord = {
-            timestamp: parsed.time ?? Date.now(),
-            level: this.mapPinoLevel(parsed.level),
-            message: parsed.msg ?? '',
-            fields: parsed,
-            source: parsed.layer ?? 'unknown',
-          };
-
-          this.logBuffer?.append(record);
-          callback();
-        } catch (error) {
-          callback(error as Error);
-        }
-      },
+    // Always use single pino instance (no multistream)
+    // LogRingBuffer is fed directly in log methods, not via Pino stream
+    this.pino = pino({
+      level: resolvedLevel,
+      ...config.options,
+      transport: finalTransport,
     });
   }
 
   /**
-   * Map Pino numeric level to LogLevel
+   * Emit log record to all registered callbacks (extensions).
+   * Fire-and-forget - errors in callbacks don't block logging.
    */
-  private mapPinoLevel(level: number): LogLevel {
-    if (level <= 10) return 'trace';
-    if (level <= 20) return 'debug';
-    if (level <= 30) return 'info';
-    if (level <= 40) return 'warn';
-    if (level <= 50) return 'error';
-    return 'fatal';
+  private emitLog(record: LogRecord): void {
+    if (this.logCallbacks.size === 0) return;
+
+    for (const callback of this.logCallbacks) {
+      try {
+        callback(record);
+      } catch (error) {
+        console.error('[PinoLogger] Error in onLog callback:', error);
+      }
+    }
   }
 
   /**
@@ -157,18 +123,53 @@ export class PinoLoggerAdapter implements ILogger {
   private constructor_child(pinoInstance: PinoLoggerInstance) {
     const instance = Object.create(PinoLoggerAdapter.prototype);
     instance.pino = pinoInstance;
+    instance.logCallbacks = this.logCallbacks; // Share callbacks with parent
+    instance.logBuffer = this.logBuffer; // Share buffer with parent
     return instance;
   }
 
   info(message: string, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
     this.pino.info(meta ?? {}, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'info',
+      message,
+      fields: meta ?? {},
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
   }
 
   warn(message: string, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
     this.pino.warn(meta ?? {}, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'warn',
+      message,
+      fields: meta ?? {},
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
   }
 
   error(message: string, error?: Error, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
     const enrichedMeta = {
       ...meta,
       ...(error && {
@@ -179,15 +180,88 @@ export class PinoLoggerAdapter implements ILogger {
         },
       }),
     };
+
     this.pino.error(enrichedMeta, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'error',
+      message,
+      fields: enrichedMeta,
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
+  }
+
+  fatal(message: string, error?: Error, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
+    const enrichedMeta = {
+      ...meta,
+      ...(error && {
+        error: {
+          message: error.message,
+          stack: error.stack,
+          name: error.name,
+        },
+      }),
+    };
+
+    this.pino.fatal(enrichedMeta, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'fatal',
+      message,
+      fields: enrichedMeta,
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
   }
 
   debug(message: string, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
     this.pino.debug(meta ?? {}, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'debug',
+      message,
+      fields: meta ?? {},
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
   }
 
   trace(message: string, meta?: Record<string, unknown>): void {
+    const logId = generateLogId();
+    const timestamp = Date.now();
+
     this.pino.trace(meta ?? {}, message);
+
+    const record: LogRecord = {
+      id: logId,
+      timestamp,
+      level: 'trace',
+      message,
+      fields: meta ?? {},
+      source: (meta?.source as string) ?? 'unknown',
+    };
+
+    this.logBuffer?.append(record);
+    this.emitLog(record);
   }
 
   child(bindings: Record<string, unknown>): ILogger {
@@ -200,6 +274,18 @@ export class PinoLoggerAdapter implements ILogger {
    */
   getLogBuffer(): ILogBuffer | undefined {
     return this.logBuffer;
+  }
+
+  /**
+   * Register callback for every log event (ILogger optional method).
+   * Used by platform to connect logger extensions (ring buffer, persistence).
+   *
+   * @param callback - Function to call on each log event
+   * @returns Unsubscribe function to remove the callback
+   */
+  onLog(callback: (record: LogRecord) => void): () => void {
+    this.logCallbacks.add(callback);
+    return () => this.logCallbacks.delete(callback);
   }
 }
 

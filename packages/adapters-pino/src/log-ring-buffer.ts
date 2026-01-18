@@ -60,11 +60,11 @@ export class LogRingBuffer implements ILogBuffer {
     }
 
     // Filter by time range
-    if (query.startTime !== undefined) {
-      results = results.filter((r) => r.timestamp >= query.startTime!);
+    if (query.from !== undefined) {
+      results = results.filter((r) => r.timestamp >= query.from!);
     }
-    if (query.endTime !== undefined) {
-      results = results.filter((r) => r.timestamp <= query.endTime!);
+    if (query.to !== undefined) {
+      results = results.filter((r) => r.timestamp <= query.to!);
     }
 
     // Filter by source
@@ -98,6 +98,13 @@ export class LogRingBuffer implements ILogBuffer {
     return () => {
       this.subscribers.delete(callback);
     };
+  }
+
+  /**
+   * Find log by ID in buffer
+   */
+  findById(id: string): LogRecord | undefined {
+    return this.buffer.find((record) => record.id === id);
   }
 
   /**

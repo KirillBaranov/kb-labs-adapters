@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/llm.ts', 'src/embeddings.ts'],
+  entry: ['src/index.ts', 'src/llm.ts', 'src/embeddings.ts', 'src/manifest.ts', 'src/embeddings-manifest.ts'],
   format: ['esm'],
   dts: true,
   clean: true,

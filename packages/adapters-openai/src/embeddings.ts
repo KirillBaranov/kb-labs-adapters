@@ -95,5 +95,8 @@ export function createAdapter(config?: OpenAIEmbeddingsConfig): OpenAIEmbeddings
   return new OpenAIEmbeddings(config);
 }
 
+// Re-export manifest for adapter loading
+export { manifest } from './embeddings-manifest.js';
+
 // Default export for direct import
 export default createAdapter;

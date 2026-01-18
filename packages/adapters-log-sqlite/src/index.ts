@@ -53,10 +53,19 @@ import type {
   LogRecord,
   LogQuery,
   ISQLDatabase,
+  AdapterManifest,
 } from '@kb-labs/core-platform/adapters';
+import { generateLogId } from '@kb-labs/core-platform/adapters';
+
+// Re-export manifest
+export { manifest } from './manifest.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Adapter manifest for SQLite log persistence extension.
+ */
 
 /**
  * SQLite persistence adapter for logs.
@@ -90,17 +99,45 @@ export class LogSQLitePersistence implements ILogPersistence {
    */
   async initialize(): Promise<void> {
     // Load and execute schema
-    const schemaPath = join(__dirname, '../src/schema.sql');
-    const schemaSQL = readFileSync(schemaPath, 'utf-8');
+    // Try dist/ first (production), then src/ (tests)
+    let schemaSQL: string;
+    try {
+      const distPath = join(__dirname, 'schema.sql');
+      schemaSQL = readFileSync(distPath, 'utf-8');
+    } catch (error) {
+      const srcPath = join(__dirname, '../src/schema.sql');
+      schemaSQL = readFileSync(srcPath, 'utf-8');
+    }
 
-    // Execute schema statements
-    const statements = schemaSQL
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'));
+    // Execute schema using SQLite's exec method (handles multiple statements)
+    // Remove SQL comments first
+    const cleanSQL = schemaSQL
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n');
 
-    for (const statement of statements) {
-      await this.db.query(statement);
+    // SQLiteAdapter should have exec() method for schema migrations
+    // Check if exec() is available (utility method in SQLiteAdapter)
+    const hasExec = 'exec' in this.db;
+    const isFunction = typeof (this.db as any).exec === 'function';
+
+    if (hasExec && isFunction) {
+      try {
+        await (this.db as any).exec(cleanSQL);
+      } catch (error) {
+        console.error('[LogSQLitePersistence] Schema execution failed:', error);
+        throw error;
+      }
+    } else {
+      // Fallback: execute statements one by one
+      const statements = cleanSQL
+        .split(';')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      for (const statement of statements) {
+        await this.db.query(statement);
+      }
     }
 
     // Start auto-flush timer
@@ -242,7 +279,7 @@ export class LogSQLitePersistence implements ILogPersistence {
       return null;
     }
 
-    const row = result.rows[0];
+    const row = result.rows[0]!;
     return {
       id: row.id,
       timestamp: row.timestamp,
@@ -404,14 +441,56 @@ export class LogSQLitePersistence implements ILogPersistence {
         `;
 
         for (const record of batch) {
-          await trx.query(insertQuery, [
-            record.id ?? this.generateId(),
+          // Ensure record has an id (generate if missing and persist it)
+          if (!record.id) {
+            record.id = this.generateId();
+          }
+
+          const params = [
+            record.id,
             record.timestamp,
             record.level,
-            record.message,
+            // Ensure message is always a string (handle objects, arrays, etc.)
+            typeof record.message === 'string'
+              ? record.message
+              : JSON.stringify(record.message),
             record.source,
-            record.fields ? JSON.stringify(record.fields) : null,
-          ]);
+            record.fields && Object.keys(record.fields).length > 0
+              ? JSON.stringify(record.fields)
+              : null,
+          ];
+
+          // Debug: validate params
+          if (params.length !== 6 || params.some((p) => p === undefined)) {
+            console.error('[LogSQLitePersistence] Invalid params:', {
+              expected: 6,
+              actual: params.length,
+              params,
+              record,
+            });
+            throw new Error(
+              `Invalid parameters: expected 6, got ${params.length}. Undefined values: ${params.map((p, i) => (p === undefined ? i : null)).filter((i) => i !== null)}`
+            );
+          }
+
+          try {
+            await trx.query(insertQuery, params);
+          } catch (queryError) {
+            // Debug: log params on error
+            console.error('[LogSQLitePersistence] Query failed with params:', {
+              paramsLength: params.length,
+              params: params.map((p, i) => ({
+                index: i,
+                type: typeof p,
+                isNull: p === null,
+                isUndefined: p === undefined,
+                value: p,
+              })),
+              record,
+              error: queryError instanceof Error ? queryError.message : String(queryError),
+            });
+            throw queryError;
+          }
         }
 
         await trx.commit();
@@ -442,23 +521,40 @@ export class LogSQLitePersistence implements ILogPersistence {
   }
 
   /**
-   * Generate unique log ID.
+   * Generate unique log ID using ULID from core-platform.
+   * Delegates to generateLogId() for consistency across all adapters.
    * @private
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+    return generateLogId();
   }
+}
+
+/**
+ * Dependencies for SQLite log persistence adapter.
+ * Matches manifest.requires.adapters: [{ id: 'db', alias: 'database' }]
+ */
+export interface LogPersistenceDeps {
+  database: ISQLDatabase;
 }
 
 /**
  * Factory function for creating SQLite log persistence adapter.
  * This is the function called by platform initialization.
  *
- * @param config - Persistence configuration
+ * @param config - Persistence configuration (can be empty, database comes from deps)
+ * @param deps - Required dependencies (database)
  * @returns Initialized persistence adapter
  */
-export async function createAdapter(config: LogPersistenceConfig): Promise<LogSQLitePersistence> {
-  const adapter = new LogSQLitePersistence(config);
+export async function createAdapter(
+  config: Omit<LogPersistenceConfig, 'database'>,
+  deps: LogPersistenceDeps
+): Promise<LogSQLitePersistence> {
+  const fullConfig: LogPersistenceConfig = {
+    ...config,
+    database: deps.database,
+  };
+  const adapter = new LogSQLitePersistence(fullConfig);
   await adapter.initialize();
   return adapter;
 }

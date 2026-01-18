@@ -22,6 +22,9 @@ import path from 'node:path';
 import fg from 'fast-glob';
 import type { IStorage, StorageMetadata } from '@kb-labs/core-platform/adapters';
 
+// Re-export manifest
+export { manifest } from './manifest.js';
+
 /**
  * Configuration for filesystem storage adapter.
  */

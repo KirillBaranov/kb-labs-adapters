@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/secure-storage.ts'],
+  entry: ['src/index.ts', 'src/secure-storage.ts', 'src/manifest.ts'],
   format: ['esm'],
   dts: true,
   clean: true,

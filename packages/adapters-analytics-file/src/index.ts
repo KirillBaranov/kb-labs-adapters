@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { format, parseISO } from 'date-fns';
 import type {
   IAnalytics,
+  ICache,
   AnalyticsContext,
   EventsQuery,
   EventsResponse,
@@ -12,6 +13,9 @@ import type {
   DlqStatus,
   AnalyticsEvent as PlatformAnalyticsEvent,
 } from '@kb-labs/core-platform/adapters';
+
+// Re-export manifest
+export { manifest } from './manifest.js';
 import { randomUUID } from 'node:crypto';
 
 export interface FileAnalyticsOptions {
@@ -24,6 +28,16 @@ export interface FileAnalyticsOptions {
    * Filename pattern (without extension), default: "events-YYYYMMDD"
    */
   filenamePattern?: string;
+
+  // Runtime contexts injected by loader based on manifest
+  /**
+   * Workspace context (injected when manifest requests 'workspace')
+   */
+  workspace?: { cwd: string };
+  /**
+   * Analytics context (injected when manifest requests 'analytics')
+   */
+  analytics?: AnalyticsContext;
 }
 
 /**
@@ -41,10 +55,12 @@ class FileAnalytics implements IAnalytics {
   private readonly baseDir: string;
   private readonly filenamePattern: string;
   private context: AnalyticsContext; // Removed readonly to allow setSource()
+  private cache?: ICache; // Optional cache for stats caching
 
-  constructor(options: FileAnalyticsOptions = {}, context?: AnalyticsContext) {
-    // Resolve baseDir: if relative, use cwd from context or process.cwd()
-    const cwd = (context?.ctx?.workspace as string) || process.cwd();
+  constructor(options: FileAnalyticsOptions = {}, context?: AnalyticsContext, cache?: ICache) {
+    // Get cwd from workspace context (injected by loader) or fallback
+    const cwd = options.workspace?.cwd ?? process.cwd();
+
     const defaultBaseDir = join(cwd, '.kb/analytics/buffer');
     const configuredBaseDir = options.baseDir ?? defaultBaseDir;
 
@@ -55,11 +71,15 @@ class FileAnalytics implements IAnalytics {
 
     this.filenamePattern = options.filenamePattern ?? 'events-YYYYMMDD';
 
-    // Use provided context or create default
-    this.context = context ?? {
+    // Priority: options.analytics (injected) → legacy context param → fallback
+    this.context = options.analytics ?? context ?? {
       source: { product: 'unknown', version: '0.0.0' },
       runId: randomUUID(),
+      ctx: { workspace: cwd },
     };
+
+    // Store cache if provided
+    this.cache = cache;
   }
 
   async track(event: string, payload?: unknown): Promise<void> {
@@ -196,6 +216,22 @@ class FileAnalytics implements IAnalytics {
   }
 
   async getStats(): Promise<EventsStats> {
+    // Cache key for stats
+    const cacheKey = 'analytics:file:stats';
+
+    // Try to get from cache first (if cache adapter was provided)
+    if (this.cache) {
+      try {
+        const cached = await this.cache.get<EventsStats>(cacheKey);
+        if (cached) {
+          return cached;
+        }
+      } catch {
+        // Cache miss or error, continue to compute
+      }
+    }
+
+    // Compute stats
     const allEvents = await this.readAllEvents();
 
     const byType: Record<string, number> = {};
@@ -204,17 +240,30 @@ class FileAnalytics implements IAnalytics {
 
     for (const event of allEvents) {
       byType[event.type] = (byType[event.type] || 0) + 1;
-      bySource[event.source.product] = (bySource[event.source.product] || 0) + 1;
+      if (event.source?.product) {
+        bySource[event.source.product] = (bySource[event.source.product] || 0) + 1;
+      }
       if (event.actor) {
         byActor[event.actor.type] = (byActor[event.actor.type] || 0) + 1;
       }
     }
 
-    const timestamps = allEvents.map((e) => parseISO(e.ts).getTime());
-    const oldestTs = timestamps.length > 0 ? Math.min(...timestamps) : Date.now();
-    const newestTs = timestamps.length > 0 ? Math.max(...timestamps) : Date.now();
+    let oldestTs = Date.now();
+    let newestTs = Date.now();
 
-    return {
+    if (allEvents.length > 0) {
+      const firstTs = parseISO(allEvents[0]!.ts).getTime();
+      oldestTs = firstTs;
+      newestTs = firstTs;
+
+      for (const event of allEvents) {
+        const ts = parseISO(event.ts).getTime();
+        if (ts < oldestTs) oldestTs = ts;
+        if (ts > newestTs) newestTs = ts;
+      }
+    }
+
+    const stats: EventsStats = {
       totalEvents: allEvents.length,
       byType,
       bySource,
@@ -224,6 +273,17 @@ class FileAnalytics implements IAnalytics {
         to: new Date(newestTs).toISOString(),
       },
     };
+
+    // Cache result for 60 seconds (if cache adapter was provided)
+    if (this.cache) {
+      try {
+        await this.cache.set(cacheKey, stats, 60 * 1000);
+      } catch {
+        // Ignore cache write errors
+      }
+    }
+
+    return stats;
   }
 
   async getDailyStats(query?: EventsQuery): Promise<DailyStats[]> {
@@ -260,7 +320,7 @@ class FileAnalytics implements IAnalytics {
         for (const event of dayEvents) {
           const payload = event.payload as any;
           totalTokens += payload?.totalTokens || 0;
-          totalCost += payload?.cost || 0;
+          totalCost += payload?.estimatedCost || payload?.cost || 0; // Try estimatedCost first (from AnalyticsLLM)
           totalDuration += payload?.durationMs || 0;
         }
 
@@ -276,7 +336,7 @@ class FileAnalytics implements IAnalytics {
         for (const event of dayEvents) {
           const payload = event.payload as any;
           totalTokens += payload?.tokens || 0;
-          totalCost += payload?.cost || 0;
+          totalCost += payload?.estimatedCost || payload?.cost || 0; // Try estimatedCost first (from AnalyticsEmbeddings)
           totalDuration += payload?.durationMs || 0;
         }
 
@@ -531,8 +591,18 @@ class FileAnalytics implements IAnalytics {
   }
 }
 
-export function createAdapter(options?: FileAnalyticsOptions, context?: AnalyticsContext): IAnalytics {
-  return new FileAnalytics(options, context);
+export function createAdapter(
+  options?: FileAnalyticsOptions,
+  deps?: Record<string, unknown>
+): IAnalytics {
+  // Extract cache from deps if provided (optional dependency)
+  const cache = deps?.cache as ICache | undefined;
+
+  // AnalyticsContext is created by core-runtime and stored in global platform
+  // We don't receive it through deps anymore since context fields were removed
+  // FileAnalytics will use options.cwd (passed by loader) to determine baseDir
+  // and create fallback context for event enrichment
+  return new FileAnalytics(options, undefined, cache);
 }
 
 export default createAdapter;

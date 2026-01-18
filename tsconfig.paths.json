@@ -3,6 +3,12 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@kb-labs/adapters-sqlite": [
+        "packages/adapters-sqlite/src/index.ts"
+      ],
+      "@kb-labs/adapters-sqlite/*": [
+        "packages/adapters-sqlite/src/*"
+      ],
       "@kb-labs/core-platform": [
         "../kb-labs-core/packages/core-platform/src/index.ts"
       ],

@@ -18,22 +18,25 @@
  * ```
  */
 
-export * from './transport.js';
-export * from './ipc-transport.js';
-export * from './unix-socket-transport.js';
-export * from './unix-socket-server.js';
-export * from './types.js';
+export * from "./transport.js";
+export * from "./ipc-transport.js";
+export * from "./unix-socket-transport.js";
+export * from "./unix-socket-server.js";
+export * from "./types.js";
 
-import type { ITransport } from './transport.js';
-import { IPCTransport, type TransportConfig } from './ipc-transport.js';
-import { UnixSocketTransport, type UnixSocketConfig } from './unix-socket-transport.js';
+import type { ITransport } from "./transport.js";
+import { IPCTransport, type TransportConfig } from "./ipc-transport.js";
+import {
+  UnixSocketTransport,
+  type UnixSocketConfig,
+} from "./unix-socket-transport.js";
 
 /**
  * Transport adapter configuration.
  */
 export interface TransportAdapterConfig {
   /** Transport type */
-  type: 'ipc' | 'unix-socket' | 'auto';
+  type: "ipc" | "unix-socket" | "auto";
   /** Socket path for Unix socket transport */
   socketPath?: string;
   /** Timeout for adapter calls */
@@ -66,7 +69,7 @@ export interface TransportAdapterConfig {
  * ```
  */
 export function createAdapter(config: TransportAdapterConfig): ITransport {
-  if (config.type === 'unix-socket') {
+  if (config.type === "unix-socket") {
     return new UnixSocketTransport({
       socketPath: config.socketPath,
       timeout: config.timeout,
@@ -74,18 +77,18 @@ export function createAdapter(config: TransportAdapterConfig): ITransport {
     } as UnixSocketConfig);
   }
 
-  if (config.type === 'ipc') {
+  if (config.type === "ipc") {
     return new IPCTransport({
       timeout: config.timeout,
     } as TransportConfig);
   }
 
   // Auto mode: try Unix Socket, fallback to IPC
-  if (config.type === 'auto') {
+  if (config.type === "auto") {
     // For now, default to Unix Socket for bulk operations
     // TODO: Add runtime detection and fallback
     return new UnixSocketTransport({
-      socketPath: config.socketPath ?? '/tmp/kb-ipc.sock',
+      socketPath: config.socketPath ?? "/tmp/kb-ipc.sock",
       timeout: config.timeout,
       autoReconnect: config.autoReconnect ?? true,
     } as UnixSocketConfig);

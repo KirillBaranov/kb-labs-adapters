@@ -33,17 +33,17 @@
  * ```
  */
 
-import Database from 'better-sqlite3';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import Database from "better-sqlite3";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type {
   ISQLDatabase,
   SQLQueryResult,
   SQLTransaction,
-} from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * Configuration for SQLite database adapter.
@@ -92,7 +92,7 @@ export class SQLiteAdapter implements ISQLDatabase {
 
   constructor(config: SQLiteConfig) {
     // Create parent directory if it doesn't exist (unless :memory:)
-    if (config.filename !== ':memory:' && !config.readonly) {
+    if (config.filename !== ":memory:" && !config.readonly) {
       const dir = dirname(config.filename);
       mkdirSync(dir, { recursive: true });
     }
@@ -107,12 +107,12 @@ export class SQLiteAdapter implements ISQLDatabase {
 
     // Enable WAL mode for better concurrency
     if (config.wal !== false) {
-      this.db.pragma('journal_mode = WAL');
+      this.db.pragma("journal_mode = WAL");
     }
 
     // Enable foreign keys
     if (config.foreignKeys !== false) {
-      this.db.pragma('foreign_keys = ON');
+      this.db.pragma("foreign_keys = ON");
     }
   }
 
@@ -123,14 +123,17 @@ export class SQLiteAdapter implements ISQLDatabase {
    * @param params - Query parameters
    * @returns Query result with rows and metadata
    */
-  async query<T = unknown>(sql: string, params?: unknown[]): Promise<SQLQueryResult<T>> {
+  async query<T = unknown>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<SQLQueryResult<T>> {
     this.checkClosed();
 
     try {
       const trimmedSql = sql.trim().toUpperCase();
 
       // SELECT queries
-      if (trimmedSql.startsWith('SELECT') || trimmedSql.startsWith('PRAGMA')) {
+      if (trimmedSql.startsWith("SELECT") || trimmedSql.startsWith("PRAGMA")) {
         const stmt = this.db.prepare(sql);
         const rows = params ? stmt.all(...params) : stmt.all();
 
@@ -152,7 +155,7 @@ export class SQLiteAdapter implements ISQLDatabase {
       };
     } catch (error) {
       throw new Error(
-        `SQLite query failed: ${error instanceof Error ? error.message : String(error)}`
+        `SQLite query failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -166,32 +169,35 @@ export class SQLiteAdapter implements ISQLDatabase {
     this.checkClosed();
 
     // SQLite doesn't have true async transactions, but we use savepoint
-    await this.query('BEGIN TRANSACTION', []);
+    await this.query("BEGIN TRANSACTION", []);
 
     let committed = false;
     let rolledBack = false;
 
     return {
-      query: async <T = unknown>(sql: string, params?: unknown[]): Promise<SQLQueryResult<T>> => {
+      query: async <T = unknown>(
+        sql: string,
+        params?: unknown[],
+      ): Promise<SQLQueryResult<T>> => {
         if (committed || rolledBack) {
-          throw new Error('Transaction already completed');
+          throw new Error("Transaction already completed");
         }
         return this.query<T>(sql, params);
       },
 
       commit: async (): Promise<void> => {
         if (committed || rolledBack) {
-          throw new Error('Transaction already completed');
+          throw new Error("Transaction already completed");
         }
-        await this.query('COMMIT', []);
+        await this.query("COMMIT", []);
         committed = true;
       },
 
       rollback: async (): Promise<void> => {
         if (committed || rolledBack) {
-          throw new Error('Transaction already completed');
+          throw new Error("Transaction already completed");
         }
-        await this.query('ROLLBACK', []);
+        await this.query("ROLLBACK", []);
         rolledBack = true;
       },
     };
@@ -212,19 +218,21 @@ export class SQLiteAdapter implements ISQLDatabase {
    */
   private checkClosed(): void {
     if (this.closed) {
-      throw new Error('Database connection is closed');
+      throw new Error("Database connection is closed");
     }
   }
 
   /**
    * Extract field metadata from prepared statement.
    */
-  private getFieldMetadata(stmt: Database.Statement): Array<{ name: string; type: string }> {
+  private getFieldMetadata(
+    stmt: Database.Statement,
+  ): Array<{ name: string; type: string }> {
     try {
       // better-sqlite3 provides column info
       return stmt.columns().map((col) => ({
         name: col.name,
-        type: col.type ?? 'unknown',
+        type: col.type ?? "unknown",
       }));
     } catch {
       return [];

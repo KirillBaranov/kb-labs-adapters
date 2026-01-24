@@ -4,17 +4,17 @@
  */
 
 export interface SerializableBuffer {
-  __type: 'Buffer';
+  __type: "Buffer";
   data: string;
 }
 
 export interface SerializableDate {
-  __type: 'Date';
+  __type: "Date";
   iso: string;
 }
 
 export interface SerializableError {
-  __type: 'Error';
+  __type: "Error";
   name: string;
   message: string;
   stack?: string;
@@ -36,16 +36,16 @@ export type SerializableArray = SerializableValue[];
 export type SerializableObject = { [key: string]: SerializableValue };
 
 export type AdapterType =
-  | 'vectorStore'
-  | 'cache'
-  | 'llm'
-  | 'embeddings'
-  | 'storage'
-  | 'logger'
-  | 'analytics'
-  | 'eventBus'
-  | 'invoke'
-  | 'artifacts';
+  | "vectorStore"
+  | "cache"
+  | "llm"
+  | "embeddings"
+  | "storage"
+  | "logger"
+  | "analytics"
+  | "eventBus"
+  | "invoke"
+  | "artifacts";
 
 export interface AdapterCallContext {
   traceId?: string;
@@ -64,7 +64,7 @@ export const IPC_PROTOCOL_VERSION = 2;
 
 export interface AdapterCall {
   version: number;
-  type: 'adapter:call';
+  type: "adapter:call";
   requestId: string;
   adapter: AdapterType;
   method: string;
@@ -74,7 +74,7 @@ export interface AdapterCall {
 }
 
 export interface AdapterResponse {
-  type: 'adapter:response';
+  type: "adapter:response";
   requestId: string;
   result?: SerializableValue;
   error?: SerializableError;
@@ -82,11 +82,11 @@ export interface AdapterResponse {
 
 export function isAdapterResponse(msg: unknown): msg is AdapterResponse {
   return (
-    typeof msg === 'object' &&
+    typeof msg === "object" &&
     msg !== null &&
-    'type' in msg &&
-    (msg as any).type === 'adapter:response' &&
-    'requestId' in msg &&
-    typeof (msg as any).requestId === 'string'
+    "type" in msg &&
+    (msg as any).type === "adapter:response" &&
+    "requestId" in msg &&
+    typeof (msg as any).requestId === "string"
   );
 }

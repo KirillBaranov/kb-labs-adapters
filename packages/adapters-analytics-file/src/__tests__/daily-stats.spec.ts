@@ -1,18 +1,21 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createAdapter } from '../index';
-import fs from 'fs-extra';
-import { join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import type { AnalyticsContext, IAnalytics } from '@kb-labs/core-platform/adapters';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { createAdapter } from "../index";
+import fs from "fs-extra";
+import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import type {
+  AnalyticsContext,
+  IAnalytics,
+} from "@kb-labs/core-platform/adapters";
 
 const TEST_BASE_DIR = join(__dirname, `test-analytics-${randomUUID()}`);
 
-describe('FileAnalytics - getDailyStats', () => {
+describe("FileAnalytics - getDailyStats", () => {
   let analytics: IAnalytics;
 
   beforeEach(async () => {
     const context: AnalyticsContext = {
-      source: { product: '@kb-labs/test', version: '1.0.0' },
+      source: { product: "@kb-labs/test", version: "1.0.0" },
       runId: randomUUID(),
     };
 
@@ -24,18 +27,18 @@ describe('FileAnalytics - getDailyStats', () => {
     await fs.remove(TEST_BASE_DIR);
   });
 
-  describe('LLM events', () => {
-    it('should aggregate LLM events by day with correct metrics', async () => {
+  describe("LLM events", () => {
+    it("should aggregate LLM events by day with correct metrics", async () => {
       // Track events across 3 days
-      await analytics.track('llm.completion.completed', {
-        model: 'gpt-4',
+      await analytics.track("llm.completion.completed", {
+        model: "gpt-4",
         totalTokens: 1000,
         cost: 0.05,
         durationMs: 1500,
       });
 
-      await analytics.track('llm.completion.completed', {
-        model: 'gpt-4',
+      await analytics.track("llm.completion.completed", {
+        model: "gpt-4",
         totalTokens: 1500,
         cost: 0.07,
         durationMs: 2000,
@@ -43,7 +46,7 @@ describe('FileAnalytics - getDailyStats', () => {
 
       // Get stats
       const stats = await analytics.getDailyStats({
-        type: 'llm.completion.completed',
+        type: "llm.completion.completed",
       });
 
       expect(stats).toHaveLength(1);
@@ -54,22 +57,26 @@ describe('FileAnalytics - getDailyStats', () => {
       expect(stats[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
-    it('should filter by date range', async () => {
+    it("should filter by date range", async () => {
       // Track an event
-      await analytics.track('llm.completion.completed', {
-        model: 'gpt-4',
+      await analytics.track("llm.completion.completed", {
+        model: "gpt-4",
         totalTokens: 1000,
         cost: 0.05,
         durationMs: 1500,
       });
 
-      const today = new Date().toISOString().split('T')[0];
-      const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
-      const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+      const today = new Date().toISOString().split("T")[0];
+      const yesterday = new Date(Date.now() - 86400000)
+        .toISOString()
+        .split("T")[0];
+      const tomorrow = new Date(Date.now() + 86400000)
+        .toISOString()
+        .split("T")[0];
 
       // Query for future dates (should be empty)
       const futureStats = await analytics.getDailyStats({
-        type: 'llm.completion.completed',
+        type: "llm.completion.completed",
         from: `${tomorrow}T00:00:00Z`,
         to: `${tomorrow}T23:59:59Z`,
       });
@@ -78,7 +85,7 @@ describe('FileAnalytics - getDailyStats', () => {
 
       // Query for today (should have data)
       const todayStats = await analytics.getDailyStats({
-        type: 'llm.completion.completed',
+        type: "llm.completion.completed",
         from: `${yesterday}T00:00:00Z`,
         to: `${tomorrow}T23:59:59Z`,
       });
@@ -87,33 +94,33 @@ describe('FileAnalytics - getDailyStats', () => {
       expect(todayStats[0].date).toBe(today);
     });
 
-    it('should return empty array when no events match', async () => {
+    it("should return empty array when no events match", async () => {
       const stats = await analytics.getDailyStats({
-        type: 'llm.completion.completed',
+        type: "llm.completion.completed",
       });
 
       expect(stats).toEqual([]);
     });
   });
 
-  describe('Embeddings events', () => {
-    it('should aggregate embeddings events with correct metrics', async () => {
-      await analytics.track('embeddings.generate.completed', {
-        model: 'text-embedding-ada-002',
+  describe("Embeddings events", () => {
+    it("should aggregate embeddings events with correct metrics", async () => {
+      await analytics.track("embeddings.generate.completed", {
+        model: "text-embedding-ada-002",
         tokens: 500,
         cost: 0.001,
         durationMs: 200,
       });
 
-      await analytics.track('embeddings.generate.completed', {
-        model: 'text-embedding-ada-002',
+      await analytics.track("embeddings.generate.completed", {
+        model: "text-embedding-ada-002",
         tokens: 700,
         cost: 0.0015,
         durationMs: 250,
       });
 
       const stats = await analytics.getDailyStats({
-        type: 'embeddings.generate.completed',
+        type: "embeddings.generate.completed",
       });
 
       expect(stats).toHaveLength(1);
@@ -128,29 +135,33 @@ describe('FileAnalytics - getDailyStats', () => {
     });
   });
 
-  describe('VectorStore events', () => {
-    it('should count operations correctly', async () => {
-      await analytics.track('vectorstore.search.completed', {
+  describe("VectorStore events", () => {
+    it("should count operations correctly", async () => {
+      await analytics.track("vectorstore.search.completed", {
         durationMs: 50,
         resultsCount: 5,
       });
 
-      await analytics.track('vectorstore.search.completed', {
+      await analytics.track("vectorstore.search.completed", {
         durationMs: 60,
         resultsCount: 3,
       });
 
-      await analytics.track('vectorstore.upsert.completed', {
+      await analytics.track("vectorstore.upsert.completed", {
         durationMs: 100,
         vectorCount: 10,
       });
 
-      await analytics.track('vectorstore.delete.completed', {
+      await analytics.track("vectorstore.delete.completed", {
         durationMs: 30,
       });
 
       const stats = await analytics.getDailyStats({
-        type: ['vectorstore.search.completed', 'vectorstore.upsert.completed', 'vectorstore.delete.completed'],
+        type: [
+          "vectorstore.search.completed",
+          "vectorstore.upsert.completed",
+          "vectorstore.delete.completed",
+        ],
       });
 
       expect(stats).toHaveLength(1);
@@ -164,18 +175,18 @@ describe('FileAnalytics - getDailyStats', () => {
     });
   });
 
-  describe('Cache events', () => {
-    it('should calculate hit rate correctly', async () => {
+  describe("Cache events", () => {
+    it("should calculate hit rate correctly", async () => {
       // 3 hits, 2 misses, 1 set
-      await analytics.track('cache.hit', { durationMs: 1 });
-      await analytics.track('cache.hit', { durationMs: 1 });
-      await analytics.track('cache.hit', { durationMs: 2 });
-      await analytics.track('cache.miss', { durationMs: 1 });
-      await analytics.track('cache.miss', { durationMs: 1 });
-      await analytics.track('cache.set', { durationMs: 5 });
+      await analytics.track("cache.hit", { durationMs: 1 });
+      await analytics.track("cache.hit", { durationMs: 1 });
+      await analytics.track("cache.hit", { durationMs: 2 });
+      await analytics.track("cache.miss", { durationMs: 1 });
+      await analytics.track("cache.miss", { durationMs: 1 });
+      await analytics.track("cache.set", { durationMs: 5 });
 
       const stats = await analytics.getDailyStats({
-        type: ['cache.hit', 'cache.miss', 'cache.set'],
+        type: ["cache.hit", "cache.miss", "cache.set"],
       });
 
       expect(stats).toHaveLength(1);
@@ -188,11 +199,11 @@ describe('FileAnalytics - getDailyStats', () => {
       });
     });
 
-    it('should handle zero gets gracefully', async () => {
-      await analytics.track('cache.set', { durationMs: 5 });
+    it("should handle zero gets gracefully", async () => {
+      await analytics.track("cache.set", { durationMs: 5 });
 
       const stats = await analytics.getDailyStats({
-        type: ['cache.hit', 'cache.miss', 'cache.set'],
+        type: ["cache.hit", "cache.miss", "cache.set"],
       });
 
       expect(stats).toHaveLength(1);
@@ -200,29 +211,33 @@ describe('FileAnalytics - getDailyStats', () => {
     });
   });
 
-  describe('Storage events', () => {
-    it('should aggregate bytes read and written', async () => {
-      await analytics.track('storage.read.completed', {
+  describe("Storage events", () => {
+    it("should aggregate bytes read and written", async () => {
+      await analytics.track("storage.read.completed", {
         durationMs: 10,
         bytesRead: 1024,
       });
 
-      await analytics.track('storage.read.completed', {
+      await analytics.track("storage.read.completed", {
         durationMs: 15,
         bytesRead: 2048,
       });
 
-      await analytics.track('storage.write.completed', {
+      await analytics.track("storage.write.completed", {
         durationMs: 20,
         bytesWritten: 512,
       });
 
-      await analytics.track('storage.delete.completed', {
+      await analytics.track("storage.delete.completed", {
         durationMs: 5,
       });
 
       const stats = await analytics.getDailyStats({
-        type: ['storage.read.completed', 'storage.write.completed', 'storage.delete.completed'],
+        type: [
+          "storage.read.completed",
+          "storage.write.completed",
+          "storage.delete.completed",
+        ],
       });
 
       expect(stats).toHaveLength(1);
@@ -235,21 +250,21 @@ describe('FileAnalytics - getDailyStats', () => {
     });
   });
 
-  describe('Sorting', () => {
-    it('should sort results by date ascending', async () => {
+  describe("Sorting", () => {
+    it("should sort results by date ascending", async () => {
       // Note: We can't easily test multi-day sorting in a unit test
       // since events are timestamped with the current time.
       // This would require mocking Date or using a more sophisticated approach.
       // For now, we just verify that single-day results are returned correctly.
 
-      await analytics.track('llm.completion.completed', {
+      await analytics.track("llm.completion.completed", {
         totalTokens: 100,
         cost: 0.01,
         durationMs: 100,
       });
 
       const stats = await analytics.getDailyStats({
-        type: 'llm.completion.completed',
+        type: "llm.completion.completed",
       });
 
       expect(stats).toHaveLength(1);
@@ -257,14 +272,14 @@ describe('FileAnalytics - getDailyStats', () => {
     });
   });
 
-  describe('Empty metrics', () => {
-    it('should not include metrics object for unknown event types', async () => {
-      await analytics.track('custom.event', {
-        someData: 'value',
+  describe("Empty metrics", () => {
+    it("should not include metrics object for unknown event types", async () => {
+      await analytics.track("custom.event", {
+        someData: "value",
       });
 
       const stats = await analytics.getDailyStats({
-        type: 'custom.event',
+        type: "custom.event",
       });
 
       expect(stats).toHaveLength(1);

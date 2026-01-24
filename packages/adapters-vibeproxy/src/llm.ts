@@ -13,7 +13,7 @@ import type {
   LLMToolCallResponse,
   LLMTool,
   LLMToolCall,
-} from '@kb-labs/core-platform';
+} from "@kb-labs/core-platform";
 
 /**
  * Configuration for VibeProxy LLM adapter.
@@ -36,8 +36,14 @@ interface VibeProxyMessagesRequest {
   model: string;
   max_tokens: number;
   messages: Array<{
-    role: 'user' | 'assistant';
-    content: string | Array<{ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: unknown } | { type: 'tool_result'; tool_use_id: string; content: string }>;
+    role: "user" | "assistant";
+    content:
+      | string
+      | Array<
+          | { type: "text"; text: string }
+          | { type: "tool_use"; id: string; name: string; input: unknown }
+          | { type: "tool_result"; tool_use_id: string; content: string }
+        >;
   }>;
   system?: string;
   temperature?: number;
@@ -47,7 +53,10 @@ interface VibeProxyMessagesRequest {
     description: string;
     input_schema: Record<string, unknown>;
   }>;
-  tool_choice?: { type: 'auto' } | { type: 'any' } | { type: 'tool'; name: string };
+  tool_choice?:
+    | { type: "auto" }
+    | { type: "any" }
+    | { type: "tool"; name: string };
 }
 
 /**
@@ -55,11 +64,14 @@ interface VibeProxyMessagesRequest {
  */
 interface VibeProxyMessagesResponse {
   id: string;
-  type: 'message';
-  role: 'assistant';
+  type: "message";
+  role: "assistant";
   model: string;
-  content: Array<{ type: 'text'; text: string } | { type: 'tool_use'; id: string; name: string; input: unknown }>;
-  stop_reason: 'end_turn' | 'max_tokens' | 'stop_sequence' | 'tool_use';
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "tool_use"; id: string; name: string; input: unknown }
+  >;
+  stop_reason: "end_turn" | "max_tokens" | "stop_sequence" | "tool_use";
   stop_sequence: string | null;
   usage: {
     input_tokens: number;
@@ -80,9 +92,14 @@ export class VibeProxyLLM implements ILLM {
   private timeout: number;
 
   constructor(config: VibeProxyLLMConfig = {}) {
-    this.baseURL = config.baseURL ?? process.env.VIBEPROXY_URL ?? 'http://localhost:8317';
-    this.apiKey = config.apiKey ?? process.env.VIBEPROXY_API_KEY ?? 'any-string';
-    this.defaultModel = config.defaultModel ?? process.env.VIBEPROXY_MODEL ?? 'claude-sonnet-4-20250514';
+    this.baseURL =
+      config.baseURL ?? process.env.VIBEPROXY_URL ?? "http://localhost:8317";
+    this.apiKey =
+      config.apiKey ?? process.env.VIBEPROXY_API_KEY ?? "any-string";
+    this.defaultModel =
+      config.defaultModel ??
+      process.env.VIBEPROXY_MODEL ??
+      "claude-sonnet-4-20250514";
     this.timeout = config.timeout ?? 120000;
   }
 
@@ -95,18 +112,24 @@ export class VibeProxyLLM implements ILLM {
 
     try {
       const response = await fetch(`${this.baseURL}${endpoint}`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': this.apiKey,
+          "Content-Type": "application/json",
+          "x-api-key": this.apiKey,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       if (!response.ok) {
-        const errorBody = await response.json().catch(() => ({ error: { message: response.statusText } })) as { error?: { message?: string } };
-        throw new Error(`VibeProxy error: ${errorBody.error?.message ?? response.statusText}`);
+        const errorBody = (await response
+          .json()
+          .catch(() => ({ error: { message: response.statusText } }))) as {
+          error?: { message?: string };
+        };
+        throw new Error(
+          `VibeProxy error: ${errorBody.error?.message ?? response.statusText}`,
+        );
       }
 
       return response.json() as Promise<T>;
@@ -121,7 +144,7 @@ export class VibeProxyLLM implements ILLM {
     const requestBody: VibeProxyMessagesRequest = {
       model,
       max_tokens: options?.maxTokens ?? 4096,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: "user", content: prompt }],
     };
 
     if (options?.systemPrompt) {
@@ -134,12 +157,15 @@ export class VibeProxyLLM implements ILLM {
       requestBody.stop_sequences = options.stop;
     }
 
-    const response = await this.request<VibeProxyMessagesResponse>('/v1/messages', requestBody);
+    const response = await this.request<VibeProxyMessagesResponse>(
+      "/v1/messages",
+      requestBody,
+    );
 
     const textContent = response.content
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
       .map((c) => c.text)
-      .join('');
+      .join("");
 
     return {
       content: textContent,
@@ -163,54 +189,58 @@ export class VibeProxyLLM implements ILLM {
    */
   async chatWithTools(
     messages: LLMMessage[],
-    options: LLMToolCallOptions
+    options: LLMToolCallOptions,
   ): Promise<LLMToolCallResponse> {
     const model = options?.model ?? this.defaultModel;
 
     // Convert LLMMessage[] to VibeProxy format
-    const vibeProxyMessages: VibeProxyMessagesRequest['messages'] = [];
+    const vibeProxyMessages: VibeProxyMessagesRequest["messages"] = [];
     let systemPrompt: string | undefined;
 
     for (const msg of messages) {
-      if (msg.role === 'system') {
+      if (msg.role === "system") {
         systemPrompt = msg.content;
         continue;
       }
 
-      if (msg.role === 'tool') {
+      if (msg.role === "tool") {
         // Tool results go in user message
         vibeProxyMessages.push({
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: msg.toolCallId || '',
-            content: msg.content,
-          }],
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: msg.toolCallId || "",
+              content: msg.content,
+            },
+          ],
         });
         continue;
       }
 
       vibeProxyMessages.push({
-        role: msg.role as 'user' | 'assistant',
+        role: msg.role as "user" | "assistant",
         content: msg.content,
       });
     }
 
     // Convert LLMTool[] to VibeProxy tools format
-    const tools: VibeProxyMessagesRequest['tools'] = options.tools.map((tool: LLMTool) => ({
-      name: tool.name,
-      description: tool.description,
-      input_schema: tool.inputSchema,
-    }));
+    const tools: VibeProxyMessagesRequest["tools"] = options.tools.map(
+      (tool: LLMTool) => ({
+        name: tool.name,
+        description: tool.description,
+        input_schema: tool.inputSchema,
+      }),
+    );
 
     // Convert tool choice
-    let tool_choice: VibeProxyMessagesRequest['tool_choice'];
-    if (options.toolChoice === 'auto') {
-      tool_choice = { type: 'auto' };
-    } else if (options.toolChoice === 'required') {
-      tool_choice = { type: 'any' };
-    } else if (options.toolChoice && typeof options.toolChoice === 'object') {
-      tool_choice = { type: 'tool', name: options.toolChoice.function.name };
+    let tool_choice: VibeProxyMessagesRequest["tool_choice"];
+    if (options.toolChoice === "auto") {
+      tool_choice = { type: "auto" };
+    } else if (options.toolChoice === "required") {
+      tool_choice = { type: "any" };
+    } else if (options.toolChoice && typeof options.toolChoice === "object") {
+      tool_choice = { type: "tool", name: options.toolChoice.function.name };
     }
     // 'none' - don't send tools at all
 
@@ -218,8 +248,8 @@ export class VibeProxyLLM implements ILLM {
       model,
       max_tokens: options?.maxTokens ?? 4096,
       messages: vibeProxyMessages,
-      tools: options.toolChoice !== 'none' ? tools : undefined,
-      tool_choice: options.toolChoice !== 'none' ? tool_choice : undefined,
+      tools: options.toolChoice !== "none" ? tools : undefined,
+      tool_choice: options.toolChoice !== "none" ? tool_choice : undefined,
     };
 
     if (systemPrompt || options?.systemPrompt) {
@@ -232,17 +262,29 @@ export class VibeProxyLLM implements ILLM {
       requestBody.stop_sequences = options.stop;
     }
 
-    const response = await this.request<VibeProxyMessagesResponse>('/v1/messages', requestBody);
+    const response = await this.request<VibeProxyMessagesResponse>(
+      "/v1/messages",
+      requestBody,
+    );
 
     // Extract text content
     const textContent = response.content
-      .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
       .map((c) => c.text)
-      .join('');
+      .join("");
 
     // Extract tool calls
     const toolCalls: LLMToolCall[] = response.content
-      .filter((c): c is { type: 'tool_use'; id: string; name: string; input: unknown } => c.type === 'tool_use')
+      .filter(
+        (
+          c,
+        ): c is {
+          type: "tool_use";
+          id: string;
+          name: string;
+          input: unknown;
+        } => c.type === "tool_use",
+      )
       .map((tc) => ({
         id: tc.id,
         name: tc.name,

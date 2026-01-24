@@ -44,21 +44,20 @@
  * ```
  */
 
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import type {
   ILogPersistence,
   LogPersistenceConfig,
   LogRecord,
   LogQuery,
   ISQLDatabase,
-  AdapterManifest,
-} from '@kb-labs/core-platform/adapters';
-import { generateLogId } from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
+import { generateLogId } from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -88,7 +87,7 @@ export class LogSQLitePersistence implements ILogPersistence {
 
   constructor(config: LogPersistenceConfig) {
     this.db = config.database;
-    this.tableName = config.tableName ?? 'logs';
+    this.tableName = config.tableName ?? "logs";
     this.batchSize = config.batchSize ?? 100;
     this.flushInterval = config.flushInterval ?? 5000; // 5 seconds
   }
@@ -102,36 +101,36 @@ export class LogSQLitePersistence implements ILogPersistence {
     // Try dist/ first (production), then src/ (tests)
     let schemaSQL: string;
     try {
-      const distPath = join(__dirname, 'schema.sql');
-      schemaSQL = readFileSync(distPath, 'utf-8');
-    } catch (error) {
-      const srcPath = join(__dirname, '../src/schema.sql');
-      schemaSQL = readFileSync(srcPath, 'utf-8');
+      const distPath = join(__dirname, "schema.sql");
+      schemaSQL = readFileSync(distPath, "utf-8");
+    } catch (_error) {
+      const srcPath = join(__dirname, "../src/schema.sql");
+      schemaSQL = readFileSync(srcPath, "utf-8");
     }
 
     // Execute schema using SQLite's exec method (handles multiple statements)
     // Remove SQL comments first
     const cleanSQL = schemaSQL
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('--'))
-      .join('\n');
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("--"))
+      .join("\n");
 
     // SQLiteAdapter should have exec() method for schema migrations
     // Check if exec() is available (utility method in SQLiteAdapter)
-    const hasExec = 'exec' in this.db;
-    const isFunction = typeof (this.db as any).exec === 'function';
+    const hasExec = "exec" in this.db;
+    const isFunction = typeof (this.db as any).exec === "function";
 
     if (hasExec && isFunction) {
       try {
         await (this.db as any).exec(cleanSQL);
       } catch (error) {
-        console.error('[LogSQLitePersistence] Schema execution failed:', error);
+        console.error("[LogSQLitePersistence] Schema execution failed:", error);
         throw error;
       }
     } else {
       // Fallback: execute statements one by one
       const statements = cleanSQL
-        .split(';')
+        .split(";")
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
 
@@ -178,9 +177,9 @@ export class LogSQLitePersistence implements ILogPersistence {
     options: {
       limit?: number;
       offset?: number;
-      sortBy?: 'timestamp' | 'level';
-      sortOrder?: 'asc' | 'desc';
-    } = {}
+      sortBy?: "timestamp" | "level";
+      sortOrder?: "asc" | "desc";
+    } = {},
   ): Promise<{
     logs: LogRecord[];
     total: number;
@@ -188,38 +187,42 @@ export class LogSQLitePersistence implements ILogPersistence {
   }> {
     const limit = options.limit ?? 100;
     const offset = options.offset ?? 0;
-    const sortBy = options.sortBy ?? 'timestamp';
-    const sortOrder = options.sortOrder ?? 'desc';
+    const sortBy = options.sortBy ?? "timestamp";
+    const sortOrder = options.sortOrder ?? "desc";
 
     // Build WHERE clause
     const conditions: string[] = [];
     const params: unknown[] = [];
 
     if (query.level) {
-      conditions.push('level = ?');
+      conditions.push("level = ?");
       params.push(query.level);
     }
 
     if (query.from !== undefined) {
-      conditions.push('timestamp >= ?');
+      conditions.push("timestamp >= ?");
       params.push(query.from);
     }
 
     if (query.to !== undefined) {
-      conditions.push('timestamp <= ?');
+      conditions.push("timestamp <= ?");
       params.push(query.to);
     }
 
     if (query.source) {
-      conditions.push('source = ?');
+      conditions.push("source = ?");
       params.push(query.source);
     }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     // Get total count
     const countQuery = `SELECT COUNT(*) as count FROM ${this.tableName} ${whereClause}`;
-    const countResult = await this.db.query<{ count: number }>(countQuery, params);
+    const countResult = await this.db.query<{ count: number }>(
+      countQuery,
+      params,
+    );
     const total = countResult.rows[0]?.count ?? 0;
 
     // Get logs
@@ -243,7 +246,7 @@ export class LogSQLitePersistence implements ILogPersistence {
     const logs: LogRecord[] = logsResult.rows.map((row) => ({
       id: row.id,
       timestamp: row.timestamp,
-      level: row.level as LogRecord['level'],
+      level: row.level as LogRecord["level"],
       message: row.message,
       source: row.source,
       fields: row.fields ? JSON.parse(row.fields) : {},
@@ -283,7 +286,7 @@ export class LogSQLitePersistence implements ILogPersistence {
     return {
       id: row.id,
       timestamp: row.timestamp,
-      level: row.level as LogRecord['level'],
+      level: row.level as LogRecord["level"],
       message: row.message,
       source: row.source,
       fields: row.fields ? JSON.parse(row.fields) : {},
@@ -298,7 +301,7 @@ export class LogSQLitePersistence implements ILogPersistence {
     options: {
       limit?: number;
       offset?: number;
-    } = {}
+    } = {},
   ): Promise<{
     logs: LogRecord[];
     total: number;
@@ -313,7 +316,9 @@ export class LogSQLitePersistence implements ILogPersistence {
       FROM logs_fts
       WHERE logs_fts MATCH ?
     `;
-    const countResult = await this.db.query<{ count: number }>(countQuery, [searchText]);
+    const countResult = await this.db.query<{ count: number }>(countQuery, [
+      searchText,
+    ]);
     const total = countResult.rows[0]?.count ?? 0;
 
     // Get matching logs
@@ -338,7 +343,7 @@ export class LogSQLitePersistence implements ILogPersistence {
     const logs: LogRecord[] = searchResult.rows.map((row) => ({
       id: row.id,
       timestamp: row.timestamp,
-      level: row.level as LogRecord['level'],
+      level: row.level as LogRecord["level"],
       message: row.message,
       source: row.source,
       fields: row.fields ? JSON.parse(row.fields) : {},
@@ -451,7 +456,7 @@ export class LogSQLitePersistence implements ILogPersistence {
             record.timestamp,
             record.level,
             // Ensure message is always a string (handle objects, arrays, etc.)
-            typeof record.message === 'string'
+            typeof record.message === "string"
               ? record.message
               : JSON.stringify(record.message),
             record.source,
@@ -462,14 +467,14 @@ export class LogSQLitePersistence implements ILogPersistence {
 
           // Debug: validate params
           if (params.length !== 6 || params.some((p) => p === undefined)) {
-            console.error('[LogSQLitePersistence] Invalid params:', {
+            console.error("[LogSQLitePersistence] Invalid params:", {
               expected: 6,
               actual: params.length,
               params,
               record,
             });
             throw new Error(
-              `Invalid parameters: expected 6, got ${params.length}. Undefined values: ${params.map((p, i) => (p === undefined ? i : null)).filter((i) => i !== null)}`
+              `Invalid parameters: expected 6, got ${params.length}. Undefined values: ${params.map((p, i) => (p === undefined ? i : null)).filter((i) => i !== null)}`,
             );
           }
 
@@ -477,7 +482,7 @@ export class LogSQLitePersistence implements ILogPersistence {
             await trx.query(insertQuery, params);
           } catch (queryError) {
             // Debug: log params on error
-            console.error('[LogSQLitePersistence] Query failed with params:', {
+            console.error("[LogSQLitePersistence] Query failed with params:", {
               paramsLength: params.length,
               params: params.map((p, i) => ({
                 index: i,
@@ -487,7 +492,10 @@ export class LogSQLitePersistence implements ILogPersistence {
                 value: p,
               })),
               record,
-              error: queryError instanceof Error ? queryError.message : String(queryError),
+              error:
+                queryError instanceof Error
+                  ? queryError.message
+                  : String(queryError),
             });
             throw queryError;
           }
@@ -510,7 +518,10 @@ export class LogSQLitePersistence implements ILogPersistence {
   private startFlushTimer(): void {
     this.flushTimer = setInterval(() => {
       this.flush().catch((error) => {
-        console.error('[LogSQLitePersistence] Failed to flush log queue:', error);
+        console.error(
+          "[LogSQLitePersistence] Failed to flush log queue:",
+          error,
+        );
       });
     }, this.flushInterval);
 
@@ -547,8 +558,8 @@ export interface LogPersistenceDeps {
  * @returns Initialized persistence adapter
  */
 export async function createAdapter(
-  config: Omit<LogPersistenceConfig, 'database'>,
-  deps: LogPersistenceDeps
+  config: Omit<LogPersistenceConfig, "database">,
+  deps: LogPersistenceDeps,
 ): Promise<LogSQLitePersistence> {
   const fullConfig: LogPersistenceConfig = {
     ...config,

@@ -1,0 +1,47 @@
+{
+  "name": "@kb-labs/adapters-transport",
+  "version": "0.1.3",
+  "description": "Transport adapters for inter-process communication (IPC, Unix Sockets)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "clean": "rimraf dist",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint . --fix",
+    "test:watch": "vitest"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.3.3",
+    "tsup": "^8.5.0",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4",
+    "@kb-labs/devkit": "link:../../../kb-labs-devkit",
+    "rimraf": "^6.0.1"
+  },
+  "keywords": [
+    "kb-labs",
+    "transport",
+    "ipc",
+    "unix-socket"
+  ],
+  "author": "KB Labs",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

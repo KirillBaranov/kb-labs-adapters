@@ -23,9 +23,9 @@
  * ```
  */
 
-import * as net from 'net';
-import * as fs from 'fs';
-import type { AdapterCall, AdapterResponse } from './types.js';
+import * as net from "net";
+import * as fs from "fs";
+import type { AdapterCall, AdapterResponse } from "./types.js";
 
 export interface UnixSocketServerConfig {
   /** Path to Unix socket file (default: /tmp/kb-ipc.sock) */
@@ -45,7 +45,7 @@ export class UnixSocketServer {
   private socketPath: string;
 
   constructor(private config: UnixSocketServerConfig = {}) {
-    this.socketPath = config.socketPath ?? '/tmp/kb-ipc.sock';
+    this.socketPath = config.socketPath ?? "/tmp/kb-ipc.sock";
   }
 
   /**
@@ -71,7 +71,7 @@ export class UnixSocketServer {
         this.handleClient(socket);
       });
 
-      this.server.on('error', (error) => {
+      this.server.on("error", (error) => {
         reject(error);
       });
 
@@ -89,14 +89,14 @@ export class UnixSocketServer {
   private handleClient(socket: net.Socket): void {
     this.clients.add(socket);
 
-    let buffer = '';
+    let buffer = "";
 
-    socket.on('data', (data) => {
-      buffer += data.toString('utf8');
+    socket.on("data", (data) => {
+      buffer += data.toString("utf8");
 
       // Process all complete messages (newline-delimited)
       let newlineIndex: number;
-      while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+      while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
         const line = buffer.slice(0, newlineIndex);
         buffer = buffer.slice(newlineIndex + 1);
 
@@ -108,17 +108,17 @@ export class UnixSocketServer {
           const call = JSON.parse(line) as AdapterCall;
           this.handleCall(socket, call);
         } catch (error) {
-          console.error('[UnixSocketServer] Failed to parse message:', error);
+          console.error("[UnixSocketServer] Failed to parse message:", error);
         }
       }
     });
 
-    socket.on('close', () => {
+    socket.on("close", () => {
       this.clients.delete(socket);
     });
 
-    socket.on('error', (error) => {
-      console.error('[UnixSocketServer] Client socket error:', error);
+    socket.on("error", (error) => {
+      console.error("[UnixSocketServer] Client socket error:", error);
       this.clients.delete(socket);
     });
   }
@@ -126,30 +126,33 @@ export class UnixSocketServer {
   /**
    * Handle adapter call from client.
    */
-  private async handleCall(socket: net.Socket, call: AdapterCall): Promise<void> {
+  private async handleCall(
+    socket: net.Socket,
+    call: AdapterCall,
+  ): Promise<void> {
     if (!this.callHandler) {
-      console.error('[UnixSocketServer] No call handler registered');
+      console.error("[UnixSocketServer] No call handler registered");
       return;
     }
 
     try {
       const response = await this.callHandler(call);
-      const message = JSON.stringify(response) + '\n';
-      socket.write(message, 'utf8');
+      const message = JSON.stringify(response) + "\n";
+      socket.write(message, "utf8");
     } catch (error) {
       // Send error response
       const errorResponse: AdapterResponse = {
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         error: {
-          __type: 'Error',
-          name: error instanceof Error ? error.name : 'Error',
+          __type: "Error",
+          name: error instanceof Error ? error.name : "Error",
           message: error instanceof Error ? error.message : String(error),
           stack: error instanceof Error ? error.stack : undefined,
         },
       };
-      const message = JSON.stringify(errorResponse) + '\n';
-      socket.write(message, 'utf8');
+      const message = JSON.stringify(errorResponse) + "\n";
+      socket.write(message, "utf8");
     }
   }
 
@@ -183,6 +186,8 @@ export class UnixSocketServer {
 /**
  * Create UnixSocketServer.
  */
-export function createUnixSocketServer(config?: UnixSocketServerConfig): UnixSocketServer {
+export function createUnixSocketServer(
+  config?: UnixSocketServerConfig,
+): UnixSocketServer {
   return new UnixSocketServer(config);
 }

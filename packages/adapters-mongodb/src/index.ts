@@ -32,18 +32,18 @@
  * ```
  */
 
-import { randomUUID } from 'node:crypto';
-import { MongoClient, type Db, type Collection, type Document as MongoDocument } from 'mongodb';
+import { randomUUID } from "node:crypto";
+import { MongoClient, type Db, type Collection } from "mongodb";
 import type {
   IDocumentDatabase,
   BaseDocument,
   DocumentFilter,
   DocumentUpdate,
   FindOptions,
-} from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * Configuration for MongoDB adapter.
@@ -89,7 +89,8 @@ export class MongoDBAdapter implements IDocumentDatabase {
   constructor(private config: MongoDBConfig) {
     this.client = new MongoClient(config.uri, {
       maxPoolSize: config.options?.maxPoolSize ?? 10,
-      serverSelectionTimeoutMS: config.options?.serverSelectionTimeoutMS ?? 30000,
+      serverSelectionTimeoutMS:
+        config.options?.serverSelectionTimeoutMS ?? 30000,
     });
 
     // Will connect lazily on first operation
@@ -101,7 +102,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   private async ensureConnected(): Promise<void> {
     if (this.closed) {
-      throw new Error('Database connection is closed');
+      throw new Error("Database connection is closed");
     }
 
     // MongoDB driver connects lazily, but we can trigger it explicitly
@@ -111,7 +112,9 @@ export class MongoDBAdapter implements IDocumentDatabase {
   /**
    * Get collection reference.
    */
-  private getCollection<T extends BaseDocument>(collection: string): Collection<T> {
+  private getCollection<T extends BaseDocument>(
+    collection: string,
+  ): Collection<T> {
     return this.db.collection<T>(collection);
   }
 
@@ -126,7 +129,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
   async find<T extends BaseDocument>(
     collection: string,
     filter: DocumentFilter<T>,
-    options?: FindOptions
+    options?: FindOptions,
   ): Promise<T[]> {
     await this.ensureConnected();
 
@@ -154,7 +157,10 @@ export class MongoDBAdapter implements IDocumentDatabase {
    * @param id - Document ID
    * @returns Document or null if not found
    */
-  async findById<T extends BaseDocument>(collection: string, id: string): Promise<T | null> {
+  async findById<T extends BaseDocument>(
+    collection: string,
+    id: string,
+  ): Promise<T | null> {
     await this.ensureConnected();
 
     const col = this.getCollection<T>(collection);
@@ -172,7 +178,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   async insertOne<T extends BaseDocument>(
     collection: string,
-    document: Omit<T, 'id' | 'createdAt' | 'updatedAt'>
+    document: Omit<T, "id" | "createdAt" | "updatedAt">,
   ): Promise<T> {
     await this.ensureConnected();
 
@@ -201,7 +207,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   async insertMany<T extends BaseDocument>(
     collection: string,
-    documents: Array<Omit<T, '_id'>>
+    documents: Array<Omit<T, "_id">>,
   ): Promise<string[]> {
     await this.ensureConnected();
 
@@ -226,7 +232,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
   async updateOne<T extends BaseDocument>(
     collection: string,
     filter: DocumentFilter<T>,
-    update: DocumentUpdate<T>
+    update: DocumentUpdate<T>,
   ): Promise<number> {
     await this.ensureConnected();
 
@@ -247,7 +253,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
   async updateMany<T extends BaseDocument>(
     collection: string,
     filter: DocumentFilter<T>,
-    update: DocumentUpdate<T>
+    update: DocumentUpdate<T>,
   ): Promise<number> {
     await this.ensureConnected();
 
@@ -268,7 +274,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
   async updateById<T extends BaseDocument>(
     collection: string,
     id: string,
-    update: DocumentUpdate<T>
+    update: DocumentUpdate<T>,
   ): Promise<T | null> {
     await this.ensureConnected();
 
@@ -277,8 +283,11 @@ export class MongoDBAdapter implements IDocumentDatabase {
     // findOneAndUpdate returns the updated document
     const result = await col.findOneAndUpdate(
       { id } as any,
-      { ...update, $set: { ...((update as any).$set || {}), updatedAt: Date.now() } } as any,
-      { returnDocument: 'after' }
+      {
+        ...update,
+        $set: { ...((update as any).$set || {}), updatedAt: Date.now() },
+      } as any,
+      { returnDocument: "after" },
     );
 
     return result as T | null;
@@ -293,7 +302,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   async deleteOne<T extends BaseDocument>(
     collection: string,
-    filter: DocumentFilter<T>
+    filter: DocumentFilter<T>,
   ): Promise<number> {
     await this.ensureConnected();
 
@@ -312,7 +321,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   async deleteMany<T extends BaseDocument>(
     collection: string,
-    filter: DocumentFilter<T>
+    filter: DocumentFilter<T>,
   ): Promise<number> {
     await this.ensureConnected();
 
@@ -347,7 +356,7 @@ export class MongoDBAdapter implements IDocumentDatabase {
    */
   async count<T extends BaseDocument>(
     collection: string,
-    filter: DocumentFilter<T>
+    filter: DocumentFilter<T>,
   ): Promise<number> {
     await this.ensureConnected();
 

@@ -18,11 +18,11 @@
  * ```
  */
 
-import Redis, { type RedisOptions } from 'ioredis';
-import type { ICache } from '@kb-labs/core-platform';
+import Redis, { type RedisOptions } from "ioredis";
+import type { ICache } from "@kb-labs/core-platform";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * Configuration for Redis cache adapter.
@@ -44,10 +44,10 @@ export class RedisCacheAdapter implements ICache {
   private keyPrefix: string;
 
   constructor(config: RedisCacheConfig = {}) {
-    this.keyPrefix = config.keyPrefix ?? 'kb:';
+    this.keyPrefix = config.keyPrefix ?? "kb:";
 
     this.client = new Redis({
-      host: config.host ?? 'localhost',
+      host: config.host ?? "localhost",
       port: config.port ?? 6379,
       ...config,
       keyPrefix: this.keyPrefix,
@@ -56,7 +56,9 @@ export class RedisCacheAdapter implements ICache {
 
   async get<T>(key: string): Promise<T | null> {
     const value = await this.client.get(key);
-    if (value === null) return null;
+    if (value === null) {
+      return null;
+    }
 
     try {
       return JSON.parse(value) as T;
@@ -94,7 +96,7 @@ export class RedisCacheAdapter implements ICache {
 
     if (keys.length > 0) {
       // Remove prefix before deleting (ioredis adds it automatically)
-      const keysWithoutPrefix = keys.map(k => k.slice(this.keyPrefix.length));
+      const keysWithoutPrefix = keys.map((k) => k.slice(this.keyPrefix.length));
       await this.client.del(...keysWithoutPrefix);
     }
   }
@@ -107,7 +109,11 @@ export class RedisCacheAdapter implements ICache {
     await this.client.zadd(key, score, member);
   }
 
-  async zrangebyscore(key: string, min: number, max: number): Promise<string[]> {
+  async zrangebyscore(
+    key: string,
+    min: number,
+    max: number,
+  ): Promise<string[]> {
     return this.client.zrangebyscore(key, min, max);
   }
 
@@ -119,17 +125,21 @@ export class RedisCacheAdapter implements ICache {
   // Atomic Operations
   // ═══════════════════════════════════════════════════════════════════════
 
-  async setIfNotExists<T>(key: string, value: T, ttl?: number): Promise<boolean> {
+  async setIfNotExists<T>(
+    key: string,
+    value: T,
+    ttl?: number,
+  ): Promise<boolean> {
     const serialized = JSON.stringify(value);
 
     if (ttl !== undefined) {
       // SET key value PX milliseconds NX
-      const result = await this.client.set(key, serialized, 'PX', ttl, 'NX');
-      return result === 'OK';
+      const result = await this.client.set(key, serialized, "PX", ttl, "NX");
+      return result === "OK";
     } else {
       // SET key value NX (no TTL)
-      const result = await this.client.set(key, serialized, 'NX');
-      return result === 'OK';
+      const result = await this.client.set(key, serialized, "NX");
+      return result === "OK";
     }
   }
 

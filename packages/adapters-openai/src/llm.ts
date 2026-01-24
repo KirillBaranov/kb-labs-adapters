@@ -3,7 +3,7 @@
  * OpenAI implementation of ILLM interface.
  */
 
-import OpenAI from 'openai';
+import OpenAI from "openai";
 import type {
   ILLM,
   LLMOptions,
@@ -13,7 +13,7 @@ import type {
   LLMToolCallResponse,
   LLMTool,
   LLMToolCall,
-} from '@kb-labs/core-platform';
+} from "@kb-labs/core-platform";
 
 /**
  * Configuration for OpenAI LLM adapter.
@@ -42,7 +42,7 @@ export class OpenAILLM implements ILLM {
       baseURL: config.baseURL,
       organization: config.organization,
     });
-    this.defaultModel = config.defaultModel ?? 'gpt-4o-mini';
+    this.defaultModel = config.defaultModel ?? "gpt-4o-mini";
   }
 
   async complete(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
@@ -51,11 +51,11 @@ export class OpenAILLM implements ILLM {
 
     // Add system prompt if provided
     if (options?.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
+      messages.push({ role: "system", content: options.systemPrompt });
     }
 
     // Add user prompt
-    messages.push({ role: 'user', content: prompt });
+    messages.push({ role: "user", content: prompt });
 
     const response = await this.client.chat.completions.create({
       model,
@@ -66,7 +66,7 @@ export class OpenAILLM implements ILLM {
     });
 
     const choice = response.choices[0];
-    const content = choice?.message?.content ?? '';
+    const content = choice?.message?.content ?? "";
 
     return {
       content,
@@ -84,11 +84,11 @@ export class OpenAILLM implements ILLM {
 
     // Add system prompt if provided
     if (options?.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt });
+      messages.push({ role: "system", content: options.systemPrompt });
     }
 
     // Add user prompt
-    messages.push({ role: 'user', content: prompt });
+    messages.push({ role: "user", content: prompt });
 
     const stream = await this.client.chat.completions.create({
       model,
@@ -113,46 +113,50 @@ export class OpenAILLM implements ILLM {
    */
   async chatWithTools(
     messages: LLMMessage[],
-    options: LLMToolCallOptions
+    options: LLMToolCallOptions,
   ): Promise<LLMToolCallResponse> {
     const model = options?.model ?? this.defaultModel;
 
     // Convert LLMMessage[] to OpenAI format
-    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = messages.map((msg) => {
-      if (msg.role === 'tool') {
+    const openaiMessages: OpenAI.ChatCompletionMessageParam[] = messages.map(
+      (msg) => {
+        if (msg.role === "tool") {
+          return {
+            role: "tool" as const,
+            content: msg.content,
+            tool_call_id: msg.toolCallId || "",
+          };
+        }
         return {
-          role: 'tool' as const,
+          role: msg.role as "system" | "user" | "assistant",
           content: msg.content,
-          tool_call_id: msg.toolCallId || '',
         };
-      }
-      return {
-        role: msg.role as 'system' | 'user' | 'assistant',
-        content: msg.content,
-      };
-    });
+      },
+    );
 
     // Convert LLMTool[] to OpenAI tools format
-    const tools: OpenAI.ChatCompletionTool[] = options.tools.map((tool: LLMTool) => ({
-      type: 'function' as const,
-      function: {
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.inputSchema,
-      },
-    }));
+    const tools: OpenAI.ChatCompletionTool[] = options.tools.map(
+      (tool: LLMTool) => ({
+        type: "function" as const,
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      }),
+    );
 
     // Convert tool choice
     let tool_choice: OpenAI.ChatCompletionToolChoiceOption | undefined;
-    if (options.toolChoice === 'auto') {
-      tool_choice = 'auto';
-    } else if (options.toolChoice === 'required') {
-      tool_choice = 'required';
-    } else if (options.toolChoice === 'none') {
-      tool_choice = 'none';
-    } else if (options.toolChoice && typeof options.toolChoice === 'object') {
+    if (options.toolChoice === "auto") {
+      tool_choice = "auto";
+    } else if (options.toolChoice === "required") {
+      tool_choice = "required";
+    } else if (options.toolChoice === "none") {
+      tool_choice = "none";
+    } else if (options.toolChoice && typeof options.toolChoice === "object") {
       tool_choice = {
-        type: 'function',
+        type: "function",
         function: { name: options.toolChoice.function.name },
       };
     }
@@ -169,7 +173,7 @@ export class OpenAILLM implements ILLM {
     });
 
     const choice = response.choices[0];
-    const content = choice?.message?.content ?? '';
+    const content = choice?.message?.content ?? "";
 
     // Extract tool calls if any
     const toolCalls: LLMToolCall[] = [];
@@ -184,7 +188,7 @@ export class OpenAILLM implements ILLM {
           });
         } catch (error) {
           // Failed to parse tool arguments - skip this tool call
-          console.warn('Failed to parse tool arguments', {
+          console.warn("Failed to parse tool arguments", {
             toolName: tc.function.name,
             error: error instanceof Error ? error.message : String(error),
           });

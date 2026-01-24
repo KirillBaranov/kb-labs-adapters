@@ -12,15 +12,15 @@
  * - Socket cleanup
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as net from 'net';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { UnixSocketServer } from '../unix-socket-server.js';
-import type { AdapterCall, AdapterResponse } from '../types.js';
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import * as net from "net";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { UnixSocketServer } from "../unix-socket-server.js";
+import type { AdapterCall, AdapterResponse } from "../types.js";
 
-describe('UnixSocketServer', () => {
+describe("UnixSocketServer", () => {
   let socketPath: string;
   let server: UnixSocketServer;
 
@@ -42,12 +42,12 @@ describe('UnixSocketServer', () => {
     }
   });
 
-  describe('Server Lifecycle', () => {
-    it('should start server and create socket file', async () => {
+  describe("Server Lifecycle", () => {
+    it("should start server and create socket file", async () => {
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: null,
       }));
@@ -62,14 +62,14 @@ describe('UnixSocketServer', () => {
       expect(stats.isSocket()).toBe(true);
     });
 
-    it('should remove existing socket file on start', async () => {
+    it("should remove existing socket file on start", async () => {
       // Create dummy socket file
-      fs.writeFileSync(socketPath, '');
+      fs.writeFileSync(socketPath, "");
 
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: null,
       }));
@@ -83,11 +83,11 @@ describe('UnixSocketServer', () => {
       expect(stats.isSocket()).toBe(true);
     });
 
-    it('should clean up socket file on close', async () => {
+    it("should clean up socket file on close", async () => {
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: null,
       }));
@@ -101,11 +101,11 @@ describe('UnixSocketServer', () => {
       expect(fs.existsSync(socketPath)).toBe(false);
     });
 
-    it('should use default socket path if not specified', async () => {
+    it("should use default socket path if not specified", async () => {
       server = new UnixSocketServer(); // No config
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: null,
       }));
@@ -113,7 +113,7 @@ describe('UnixSocketServer', () => {
       await server.start();
 
       // Default path is /tmp/kb-ipc.sock
-      const defaultPath = '/tmp/kb-ipc.sock';
+      const defaultPath = "/tmp/kb-ipc.sock";
       expect(fs.existsSync(defaultPath)).toBe(true);
 
       await server.close();
@@ -121,12 +121,12 @@ describe('UnixSocketServer', () => {
     });
   });
 
-  describe('Client Connections', () => {
-    it('should accept client connections', async () => {
+  describe("Client Connections", () => {
+    it("should accept client connections", async () => {
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: { success: true },
       }));
@@ -137,14 +137,14 @@ describe('UnixSocketServer', () => {
       const client = net.connect(socketPath);
 
       await new Promise<void>((resolve, reject) => {
-        client.on('connect', () => resolve());
-        client.on('error', reject);
+        client.on("connect", () => resolve());
+        client.on("error", reject);
       });
 
       client.destroy();
     });
 
-    it('should handle multiple concurrent clients', async () => {
+    it("should handle multiple concurrent clients", async () => {
       server = new UnixSocketServer({ socketPath });
 
       let callCount = 0;
@@ -152,7 +152,7 @@ describe('UnixSocketServer', () => {
       server.onCall(async (call) => {
         callCount++;
         return {
-          type: 'adapter:response',
+          type: "adapter:response",
           requestId: call.requestId,
           result: { callNumber: callCount },
         };
@@ -172,13 +172,13 @@ describe('UnixSocketServer', () => {
         clients.map((client, i) =>
           sendAdapterCall(client, {
             version: 2,
-            type: 'adapter:call',
+            type: "adapter:call",
             requestId: `req-${i}`,
-            adapter: 'cache',
-            method: 'get',
+            adapter: "cache",
+            method: "get",
             args: [`key-${i}`],
-          })
-        )
+          }),
+        ),
       );
 
       // All should get responses
@@ -189,11 +189,11 @@ describe('UnixSocketServer', () => {
       clients.forEach((c) => c.destroy());
     });
 
-    it('should clean up client on disconnect', async () => {
+    it("should clean up client on disconnect", async () => {
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => ({
-        type: 'adapter:response',
+        type: "adapter:response",
         requestId: call.requestId,
         result: null,
       }));
@@ -206,7 +206,9 @@ describe('UnixSocketServer', () => {
       client.destroy();
 
       // Wait for cleanup
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       // Server should still be running
       const client2 = await connectClient(socketPath);
@@ -214,23 +216,23 @@ describe('UnixSocketServer', () => {
     });
   });
 
-  describe('Adapter Call Handling', () => {
-    it('should execute adapter call and return result', async () => {
+  describe("Adapter Call Handling", () => {
+    it("should execute adapter call and return result", async () => {
       server = new UnixSocketServer({ socketPath });
 
       server.onCall(async (call) => {
         // Simulate adapter execution
-        if (call.adapter === 'cache' && call.method === 'get') {
+        if (call.adapter === "cache" && call.method === "get") {
           const key = call.args[0] as string;
           return {
-            type: 'adapter:response',
+            type: "adapter:response",
             requestId: call.requestId,
-            result: { key, value: 'cached-value' },
+            result: { key, value: "cached-value" },
           };
         }
 
         return {
-          type: 'adapter:response',
+          type: "adapter:response",
           requestId: call.requestId,
           result: null,
         };
@@ -242,26 +244,26 @@ describe('UnixSocketServer', () => {
 
       const response = await sendAdapterCall(client, {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'test-123',
-        adapter: 'cache',
-        method: 'get',
-        args: ['my-key'],
+        type: "adapter:call",
+        requestId: "test-123",
+        adapter: "cache",
+        method: "get",
+        args: ["my-key"],
       });
 
-      expect(response.type).toBe('adapter:response');
-      expect(response.requestId).toBe('test-123');
-      expect(response.result).toEqual({ key: 'my-key', value: 'cached-value' });
+      expect(response.type).toBe("adapter:response");
+      expect(response.requestId).toBe("test-123");
+      expect(response.result).toEqual({ key: "my-key", value: "cached-value" });
 
       client.destroy();
     });
 
-    it('should handle errors in adapter call handler', async () => {
+    it("should handle errors in adapter call handler", async () => {
       server = new UnixSocketServer({ socketPath });
 
-      server.onCall(async (call) => {
+      server.onCall(async (_call) => {
         // Simulate adapter error
-        throw new Error('Adapter failed');
+        throw new Error("Adapter failed");
       });
 
       await server.start();
@@ -270,28 +272,27 @@ describe('UnixSocketServer', () => {
 
       const response = await sendAdapterCall(client, {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'error-test',
-        adapter: 'llm',
-        method: 'chat',
+        type: "adapter:call",
+        requestId: "error-test",
+        adapter: "llm",
+        method: "chat",
         args: [{ messages: [] }],
       });
 
-      expect(response.type).toBe('adapter:response');
-      expect(response.requestId).toBe('error-test');
+      expect(response.type).toBe("adapter:response");
+      expect(response.requestId).toBe("error-test");
       expect(response.error).toBeDefined();
-      expect(response.error?.__type).toBe('Error');
-      expect(response.error?.message).toBe('Adapter failed');
+      expect(response.error?.__type).toBe("Error");
+      expect(response.error?.message).toBe("Adapter failed");
 
       client.destroy();
     });
 
-    it('should handle non-Error exceptions', async () => {
+    it("should handle non-Error exceptions", async () => {
       server = new UnixSocketServer({ socketPath });
 
-      server.onCall(async (call) => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error
-        throw 'String error';
+      server.onCall(async (_call) => {
+        throw new Error("String error");
       });
 
       await server.start();
@@ -300,25 +301,25 @@ describe('UnixSocketServer', () => {
 
       const response = await sendAdapterCall(client, {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'string-error',
-        adapter: 'cache',
-        method: 'get',
-        args: ['key'],
+        type: "adapter:call",
+        requestId: "string-error",
+        adapter: "cache",
+        method: "get",
+        args: ["key"],
       });
 
       expect(response.error).toBeDefined();
-      expect(response.error?.message).toBe('String error');
+      expect(response.error?.message).toBe("String error");
 
       client.destroy();
     });
 
-    it('should preserve error stack traces', async () => {
+    it("should preserve error stack traces", async () => {
       server = new UnixSocketServer({ socketPath });
 
-      server.onCall(async (call) => {
-        const error = new Error('Test error');
-        error.stack = 'Error: Test error\n  at CustomLocation';
+      server.onCall(async (_call) => {
+        const error = new Error("Test error");
+        error.stack = "Error: Test error\n  at CustomLocation";
         throw error;
       });
 
@@ -328,21 +329,21 @@ describe('UnixSocketServer', () => {
 
       const response = await sendAdapterCall(client, {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'stack-test',
-        adapter: 'storage',
-        method: 'read',
-        args: ['/path'],
+        type: "adapter:call",
+        requestId: "stack-test",
+        adapter: "storage",
+        method: "read",
+        args: ["/path"],
       });
 
-      expect(response.error?.stack).toContain('CustomLocation');
+      expect(response.error?.stack).toContain("CustomLocation");
 
       client.destroy();
     });
   });
 
-  describe('Message Protocol', () => {
-    it('should parse newline-delimited JSON messages', async () => {
+  describe("Message Protocol", () => {
+    it("should parse newline-delimited JSON messages", async () => {
       server = new UnixSocketServer({ socketPath });
 
       const receivedCalls: AdapterCall[] = [];
@@ -350,7 +351,7 @@ describe('UnixSocketServer', () => {
       server.onCall(async (call) => {
         receivedCalls.push(call);
         return {
-          type: 'adapter:response',
+          type: "adapter:response",
           requestId: call.requestId,
           result: null,
         };
@@ -363,45 +364,47 @@ describe('UnixSocketServer', () => {
       // Send 3 messages in one write (newline-delimited)
       const msg1: AdapterCall = {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'msg1',
-        adapter: 'cache',
-        method: 'get',
-        args: ['key1'],
+        type: "adapter:call",
+        requestId: "msg1",
+        adapter: "cache",
+        method: "get",
+        args: ["key1"],
       };
       const msg2: AdapterCall = {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'msg2',
-        adapter: 'cache',
-        method: 'get',
-        args: ['key2'],
+        type: "adapter:call",
+        requestId: "msg2",
+        adapter: "cache",
+        method: "get",
+        args: ["key2"],
       };
       const msg3: AdapterCall = {
         version: 2,
-        type: 'adapter:call',
-        requestId: 'msg3',
-        adapter: 'cache',
-        method: 'get',
-        args: ['key3'],
+        type: "adapter:call",
+        requestId: "msg3",
+        adapter: "cache",
+        method: "get",
+        args: ["key3"],
       };
 
-      client.write(JSON.stringify(msg1) + '\n');
-      client.write(JSON.stringify(msg2) + '\n');
-      client.write(JSON.stringify(msg3) + '\n');
+      client.write(JSON.stringify(msg1) + "\n");
+      client.write(JSON.stringify(msg2) + "\n");
+      client.write(JSON.stringify(msg3) + "\n");
 
       // Wait for processing
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       expect(receivedCalls).toHaveLength(3);
-      expect(receivedCalls[0].requestId).toBe('msg1');
-      expect(receivedCalls[1].requestId).toBe('msg2');
-      expect(receivedCalls[2].requestId).toBe('msg3');
+      expect(receivedCalls[0].requestId).toBe("msg1");
+      expect(receivedCalls[1].requestId).toBe("msg2");
+      expect(receivedCalls[2].requestId).toBe("msg3");
 
       client.destroy();
     });
 
-    it('should ignore empty lines', async () => {
+    it("should ignore empty lines", async () => {
       server = new UnixSocketServer({ socketPath });
 
       const receivedCalls: AdapterCall[] = [];
@@ -409,7 +412,7 @@ describe('UnixSocketServer', () => {
       server.onCall(async (call) => {
         receivedCalls.push(call);
         return {
-          type: 'adapter:response',
+          type: "adapter:response",
           requestId: call.requestId,
           result: null,
         };
@@ -420,28 +423,30 @@ describe('UnixSocketServer', () => {
       const client = await connectClient(socketPath);
 
       // Send with empty lines
-      client.write('\n\n');
+      client.write("\n\n");
       client.write(
         JSON.stringify({
           version: 2,
-          type: 'adapter:call',
-          requestId: 'valid',
-          adapter: 'cache',
-          method: 'get',
+          type: "adapter:call",
+          requestId: "valid",
+          adapter: "cache",
+          method: "get",
           args: [],
-        }) + '\n'
+        }) + "\n",
       );
-      client.write('\n');
+      client.write("\n");
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       expect(receivedCalls).toHaveLength(1);
-      expect(receivedCalls[0].requestId).toBe('valid');
+      expect(receivedCalls[0].requestId).toBe("valid");
 
       client.destroy();
     });
 
-    it('should handle malformed JSON gracefully', async () => {
+    it("should handle malformed JSON gracefully", async () => {
       server = new UnixSocketServer({ socketPath });
 
       const receivedCalls: AdapterCall[] = [];
@@ -449,7 +454,7 @@ describe('UnixSocketServer', () => {
       server.onCall(async (call) => {
         receivedCalls.push(call);
         return {
-          type: 'adapter:response',
+          type: "adapter:response",
           requestId: call.requestId,
           result: null,
         };
@@ -460,25 +465,27 @@ describe('UnixSocketServer', () => {
       const client = await connectClient(socketPath);
 
       // Send malformed JSON
-      client.write('{ invalid json }\n');
+      client.write("{ invalid json }\n");
 
       // Send valid message after
       client.write(
         JSON.stringify({
           version: 2,
-          type: 'adapter:call',
-          requestId: 'after-error',
-          adapter: 'cache',
-          method: 'get',
+          type: "adapter:call",
+          requestId: "after-error",
+          adapter: "cache",
+          method: "get",
           args: [],
-        }) + '\n'
+        }) + "\n",
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
 
       // Should process valid message despite earlier error
       expect(receivedCalls).toHaveLength(1);
-      expect(receivedCalls[0].requestId).toBe('after-error');
+      expect(receivedCalls[0].requestId).toBe("after-error");
 
       client.destroy();
     });
@@ -492,8 +499,8 @@ async function connectClient(socketPath: string): Promise<net.Socket> {
   const client = net.connect(socketPath);
 
   return new Promise<net.Socket>((resolve, reject) => {
-    client.on('connect', () => resolve(client));
-    client.on('error', reject);
+    client.on("connect", () => resolve(client));
+    client.on("error", reject);
   });
 }
 
@@ -502,20 +509,20 @@ async function connectClient(socketPath: string): Promise<net.Socket> {
  */
 async function sendAdapterCall(
   client: net.Socket,
-  call: AdapterCall
+  call: AdapterCall,
 ): Promise<AdapterResponse> {
   return new Promise<AdapterResponse>((resolve, reject) => {
-    let buffer = '';
+    let buffer = "";
 
     const onData = (data: Buffer) => {
-      buffer += data.toString('utf8');
+      buffer += data.toString("utf8");
 
-      const newlineIndex = buffer.indexOf('\n');
+      const newlineIndex = buffer.indexOf("\n");
       if (newlineIndex !== -1) {
         const line = buffer.slice(0, newlineIndex);
         try {
           const response = JSON.parse(line) as AdapterResponse;
-          client.off('data', onData);
+          client.off("data", onData);
           resolve(response);
         } catch (error) {
           reject(error);
@@ -523,21 +530,21 @@ async function sendAdapterCall(
       }
     };
 
-    client.on('data', onData);
+    client.on("data", onData);
 
     // Send call
-    const message = JSON.stringify(call) + '\n';
-    client.write(message, 'utf8', (error) => {
+    const message = JSON.stringify(call) + "\n";
+    client.write(message, "utf8", (error) => {
       if (error) {
-        client.off('data', onData);
+        client.off("data", onData);
         reject(error);
       }
     });
 
     // Timeout after 5s
     setTimeout(() => {
-      client.off('data', onData);
-      reject(new Error('Response timeout'));
+      client.off("data", onData);
+      reject(new Error("Response timeout"));
     }, 5000);
   });
 }

@@ -19,13 +19,13 @@
  * ```
  */
 
-import pino, { type Logger as PinoLoggerInstance } from 'pino';
-import type { ILogger, ILogBuffer, LogRecord } from '@kb-labs/core-platform';
-import { generateLogId } from '@kb-labs/core-platform/adapters';
-import { LogRingBuffer } from './log-ring-buffer';
+import pino, { type Logger as PinoLoggerInstance } from "pino";
+import type { ILogger, ILogBuffer, LogRecord } from "@kb-labs/core-platform";
+import { generateLogId } from "@kb-labs/core-platform/adapters";
+import { LogRingBuffer } from "./log-ring-buffer";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * Configuration for log streaming/buffering
@@ -44,7 +44,7 @@ export interface StreamingConfig {
  */
 export interface PinoLoggerConfig {
   /** Log level (default: 'info') */
-  level?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
+  level?: "trace" | "debug" | "info" | "warn" | "error" | "fatal";
   /** Enable pretty printing for development (default: false) */
   pretty?: boolean;
   /** Streaming configuration (optional) */
@@ -65,26 +65,26 @@ export class PinoLoggerAdapter implements ILogger {
     // Resolve log level with priority: ENV var > config.level > 'info'
     // This allows overriding via KB_LOG_LEVEL or LOG_LEVEL environment variables
     const resolvedLevel =
-      process.env.KB_LOG_LEVEL as PinoLoggerConfig['level'] ??
-      process.env.LOG_LEVEL as PinoLoggerConfig['level'] ??
+      (process.env.KB_LOG_LEVEL as PinoLoggerConfig["level"]) ??
+      (process.env.LOG_LEVEL as PinoLoggerConfig["level"]) ??
       config.level ??
-      'info';
+      "info";
 
     // Initialize log buffer if streaming is enabled
     if (config.streaming?.enabled) {
       this.logBuffer = new LogRingBuffer(
         config.streaming.bufferSize ?? 1000,
-        config.streaming.bufferMaxAge ?? 3600000
+        config.streaming.bufferMaxAge ?? 3600000,
       );
     }
 
     const transport = config.pretty
       ? {
-          target: 'pino-pretty',
+          target: "pino-pretty",
           options: {
             colorize: true,
-            translateTime: 'SYS:standard',
-            ignore: 'pid,hostname',
+            translateTime: "SYS:standard",
+            ignore: "pid,hostname",
           },
         }
       : undefined;
@@ -106,13 +106,15 @@ export class PinoLoggerAdapter implements ILogger {
    * Fire-and-forget - errors in callbacks don't block logging.
    */
   private emitLog(record: LogRecord): void {
-    if (this.logCallbacks.size === 0) return;
+    if (this.logCallbacks.size === 0) {
+      return;
+    }
 
     for (const callback of this.logCallbacks) {
       try {
         callback(record);
       } catch (error) {
-        console.error('[PinoLogger] Error in onLog callback:', error);
+        console.error("[PinoLogger] Error in onLog callback:", error);
       }
     }
   }
@@ -137,10 +139,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'info',
+      level: "info",
       message,
       fields: meta ?? {},
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -156,10 +158,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'warn',
+      level: "warn",
       message,
       fields: meta ?? {},
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -186,10 +188,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'error',
+      level: "error",
       message,
       fields: enrichedMeta,
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -216,10 +218,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'fatal',
+      level: "fatal",
       message,
       fields: enrichedMeta,
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -235,10 +237,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'debug',
+      level: "debug",
       message,
       fields: meta ?? {},
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -254,10 +256,10 @@ export class PinoLoggerAdapter implements ILogger {
     const record: LogRecord = {
       id: logId,
       timestamp,
-      level: 'trace',
+      level: "trace",
       message,
       fields: meta ?? {},
-      source: (meta?.source as string) ?? 'unknown',
+      source: (meta?.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -301,4 +303,4 @@ export function createAdapter(config?: PinoLoggerConfig): PinoLoggerAdapter {
 export default createAdapter;
 
 // Export buffer class
-export { LogRingBuffer } from './log-ring-buffer';
+export { LogRingBuffer } from "./log-ring-buffer";

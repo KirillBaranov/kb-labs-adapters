@@ -3,21 +3,21 @@
  * Adapter manifest for SQLite database.
  */
 
-import type { AdapterManifest } from '@kb-labs/core-platform';
+import type { AdapterManifest } from "@kb-labs/core-platform";
 
 /**
  * Adapter manifest for SQLite database.
  */
 export const manifest: AdapterManifest = {
-  manifestVersion: '1.0.0',
-  id: 'sqlite-database',
-  name: 'SQLite Database',
-  version: '1.0.0',
-  description: 'Lightweight embedded SQL database using better-sqlite3',
-  author: 'KB Labs',
-  license: 'MIT',
-  type: 'core',
-  implements: 'ISQLDatabase',
+  manifestVersion: "1.0.0",
+  id: "sqlite-database",
+  name: "SQLite Database",
+  version: "1.0.0",
+  description: "Lightweight embedded SQL database using better-sqlite3",
+  author: "KB Labs",
+  license: "MIT",
+  type: "core",
+  implements: "ISQLDatabase",
   capabilities: {
     transactions: true,
     search: true,
@@ -29,18 +29,18 @@ export const manifest: AdapterManifest = {
   },
   configSchema: {
     filename: {
-      type: 'string',
-      description: 'Database file path (use :memory: for in-memory database)',
+      type: "string",
+      description: "Database file path (use :memory: for in-memory database)",
     },
     readonly: {
-      type: 'boolean',
+      type: "boolean",
       default: false,
-      description: 'Open database in readonly mode',
+      description: "Open database in readonly mode",
     },
     timeout: {
-      type: 'number',
+      type: "number",
       default: 5000,
-      description: 'Busy timeout in milliseconds',
+      description: "Busy timeout in milliseconds",
     },
   },
 };

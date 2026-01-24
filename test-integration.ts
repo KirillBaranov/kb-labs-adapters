@@ -20,10 +20,6 @@ import { createSecureStorage } from './packages/adapters-fs/src/secure-storage.j
 import { createAdapter as createSQLite } from './packages/adapters-sqlite/src/index.js';
 import { createSecureSQL } from './packages/adapters-sqlite/src/secure-sql.js';
 
-// Document adapters (MongoDB - will need actual MongoDB instance)
-import { createAdapter as createMongoDB } from './packages/adapters-mongodb/src/index.js';
-import { createSecureDocument } from './packages/adapters-mongodb/src/secure-document.js';
-
 async function testStorage() {
   console.log('\n📦 Testing Storage Adapters...');
 

@@ -73,7 +73,8 @@
     "tsup": "^8",
     "typescript": "^5",
     "vitest": "^3.2.4",
-    "@byjohann/toon": "*"
+    "@byjohann/toon": "*",
+    "@types/node": "^24.3.3"
   },
   "engines": {
     "node": ">=18.18.0",

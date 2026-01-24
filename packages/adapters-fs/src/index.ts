@@ -17,13 +17,16 @@
  * ```
  */
 
-import fs from 'fs-extra';
-import path from 'node:path';
-import fg from 'fast-glob';
-import type { IStorage, StorageMetadata } from '@kb-labs/core-platform/adapters';
+import fs from "fs-extra";
+import path from "node:path";
+import fg from "fast-glob";
+import type {
+  IStorage,
+  StorageMetadata,
+} from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * Configuration for filesystem storage adapter.
@@ -67,7 +70,7 @@ export class FilesystemStorageAdapter implements IStorage {
     try {
       return await fs.readFile(absolutePath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
       }
       throw error;
@@ -89,7 +92,7 @@ export class FilesystemStorageAdapter implements IStorage {
     try {
       await fs.unlink(absolutePath);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         // File doesn't exist - that's okay
         return;
       }
@@ -141,7 +144,7 @@ export class FilesystemStorageAdapter implements IStorage {
         contentType: this.guessContentType(filepath),
       };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
       }
       throw error;
@@ -193,10 +196,14 @@ export class FilesystemStorageAdapter implements IStorage {
     const results: StorageMetadata[] = [];
 
     for (const entry of files) {
-      if (typeof entry === 'string') continue; // Skip if no stats
+      if (typeof entry === "string") {
+        continue;
+      } // Skip if no stats
 
       const stats = entry.stats;
-      if (!stats) continue;
+      if (!stats) {
+        continue;
+      }
 
       // Convert absolute path back to relative
       const relativePath = path.relative(this.baseDir, entry.path);
@@ -219,23 +226,23 @@ export class FilesystemStorageAdapter implements IStorage {
   private guessContentType(filepath: string): string {
     const ext = path.extname(filepath).toLowerCase();
     const mimeTypes: Record<string, string> = {
-      '.txt': 'text/plain',
-      '.md': 'text/markdown',
-      '.json': 'application/json',
-      '.js': 'application/javascript',
-      '.ts': 'application/typescript',
-      '.html': 'text/html',
-      '.css': 'text/css',
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.svg': 'image/svg+xml',
-      '.pdf': 'application/pdf',
-      '.zip': 'application/zip',
+      ".txt": "text/plain",
+      ".md": "text/markdown",
+      ".json": "application/json",
+      ".js": "application/javascript",
+      ".ts": "application/typescript",
+      ".html": "text/html",
+      ".css": "text/css",
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".svg": "image/svg+xml",
+      ".pdf": "application/pdf",
+      ".zip": "application/zip",
     };
 
-    return mimeTypes[ext] ?? 'application/octet-stream';
+    return mimeTypes[ext] ?? "application/octet-stream";
   }
 }
 
@@ -243,7 +250,9 @@ export class FilesystemStorageAdapter implements IStorage {
  * Create filesystem storage adapter.
  * This is the factory function called by initPlatform() when loading adapters.
  */
-export function createAdapter(config?: FilesystemStorageConfig): FilesystemStorageAdapter {
+export function createAdapter(
+  config?: FilesystemStorageConfig,
+): FilesystemStorageAdapter {
   return new FilesystemStorageAdapter(config);
 }
 

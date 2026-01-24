@@ -3,16 +3,16 @@
  * OpenAI implementation of IEmbeddings interface.
  */
 
-import OpenAI from 'openai';
-import type { IEmbeddings } from '@kb-labs/core-platform';
+import OpenAI from "openai";
+import type { IEmbeddings } from "@kb-labs/core-platform";
 
 /**
  * Supported OpenAI embedding models and their dimensions.
  */
 export const EMBEDDING_MODELS = {
-  'text-embedding-3-small': 1536,
-  'text-embedding-3-large': 3072,
-  'text-embedding-ada-002': 1536,
+  "text-embedding-3-small": 1536,
+  "text-embedding-3-large": 3072,
+  "text-embedding-ada-002": 1536,
 } as const;
 
 export type EmbeddingModel = keyof typeof EMBEDDING_MODELS;
@@ -45,7 +45,7 @@ export class OpenAIEmbeddings implements IEmbeddings {
       baseURL: config.baseURL,
       organization: config.organization,
     });
-    this.model = config.model ?? 'text-embedding-3-small';
+    this.model = config.model ?? "text-embedding-3-small";
     this.dimensions = EMBEDDING_MODELS[this.model];
   }
 
@@ -57,7 +57,7 @@ export class OpenAIEmbeddings implements IEmbeddings {
 
     const first = response.data[0];
     if (!first) {
-      throw new Error('OpenAI embeddings API returned empty response');
+      throw new Error("OpenAI embeddings API returned empty response");
     }
     return first.embedding;
   }
@@ -91,12 +91,14 @@ export class OpenAIEmbeddings implements IEmbeddings {
  * Create OpenAI embeddings adapter.
  * This is the factory function called by initPlatform() when loading adapters.
  */
-export function createAdapter(config?: OpenAIEmbeddingsConfig): OpenAIEmbeddings {
+export function createAdapter(
+  config?: OpenAIEmbeddingsConfig,
+): OpenAIEmbeddings {
   return new OpenAIEmbeddings(config);
 }
 
 // Re-export manifest for adapter loading
-export { manifest } from './embeddings-manifest.js';
+export { manifest } from "./embeddings-manifest.js";
 
 // Default export for direct import
 export default createAdapter;

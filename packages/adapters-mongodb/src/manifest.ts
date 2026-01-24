@@ -3,21 +3,21 @@
  * Adapter manifest for MongoDB document database.
  */
 
-import type { AdapterManifest } from '@kb-labs/core-platform';
+import type { AdapterManifest } from "@kb-labs/core-platform";
 
 /**
  * Adapter manifest for MongoDB document database.
  */
 export const manifest: AdapterManifest = {
-  manifestVersion: '1.0.0',
-  id: 'mongodb-documentdb',
-  name: 'MongoDB Document Database',
-  version: '1.0.0',
-  description: 'NoSQL document database using MongoDB',
-  author: 'KB Labs',
-  license: 'MIT',
-  type: 'core',
-  implements: 'IDocumentDatabase',
+  manifestVersion: "1.0.0",
+  id: "mongodb-documentdb",
+  name: "MongoDB Document Database",
+  version: "1.0.0",
+  description: "NoSQL document database using MongoDB",
+  author: "KB Labs",
+  license: "MIT",
+  type: "core",
+  implements: "IDocumentDatabase",
   capabilities: {
     transactions: true,
     search: true,
@@ -29,17 +29,17 @@ export const manifest: AdapterManifest = {
   },
   configSchema: {
     uri: {
-      type: 'string',
-      description: 'MongoDB connection URI (e.g., mongodb://localhost:27017)',
+      type: "string",
+      description: "MongoDB connection URI (e.g., mongodb://localhost:27017)",
     },
     database: {
-      type: 'string',
-      description: 'Database name',
+      type: "string",
+      description: "Database name",
     },
     poolSize: {
-      type: 'number',
+      type: "number",
       default: 10,
-      description: 'Connection pool size',
+      description: "Connection pool size",
     },
   },
 };

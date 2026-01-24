@@ -1,15 +1,9 @@
 import { defineConfig } from 'tsup';
+import nodePreset from '@kb-labs/devkit/tsup/node';
 
 export default defineConfig({
+  ...nodePreset,
+  tsconfig: 'tsconfig.build.json',
   entry: ['src/index.ts', 'src/manifest.ts'],
-  format: ['esm'],
-  dts: {
-    compilerOptions: {
-      skipLibCheck: true,
-    },
-  },
-  clean: true,
-  external: ['@kb-labs/core-platform'],
-  treeshake: true,
-  splitting: false,
+  dts: true,
 });

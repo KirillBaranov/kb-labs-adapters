@@ -3,21 +3,21 @@
  * Adapter manifest for Qdrant vector store.
  */
 
-import type { AdapterManifest } from '@kb-labs/core-platform';
+import type { AdapterManifest } from "@kb-labs/core-platform";
 
 /**
  * Adapter manifest for Qdrant vector store.
  */
 export const manifest: AdapterManifest = {
-  manifestVersion: '1.0.0',
-  id: 'qdrant-vectorstore',
-  name: 'Qdrant Vector Store',
-  version: '1.0.0',
-  description: 'High-performance vector database for semantic search and RAG',
-  author: 'KB Labs',
-  license: 'MIT',
-  type: 'core',
-  implements: 'IVectorStore',
+  manifestVersion: "1.0.0",
+  id: "qdrant-vectorstore",
+  name: "Qdrant Vector Store",
+  version: "1.0.0",
+  description: "High-performance vector database for semantic search and RAG",
+  author: "KB Labs",
+  license: "MIT",
+  type: "core",
+  implements: "IVectorStore",
   capabilities: {
     search: true,
     batch: true,
@@ -28,27 +28,27 @@ export const manifest: AdapterManifest = {
   },
   configSchema: {
     url: {
-      type: 'string',
-      description: 'Qdrant server URL (e.g., http://localhost:6333)',
+      type: "string",
+      description: "Qdrant server URL (e.g., http://localhost:6333)",
     },
     apiKey: {
-      type: 'string',
-      description: 'API key for authentication (optional)',
+      type: "string",
+      description: "API key for authentication (optional)",
     },
     collectionName: {
-      type: 'string',
-      default: 'kb-vectors',
-      description: 'Collection name',
+      type: "string",
+      default: "kb-vectors",
+      description: "Collection name",
     },
     dimension: {
-      type: 'number',
+      type: "number",
       default: 1536,
-      description: 'Vector dimension (default: 1536 for OpenAI embeddings)',
+      description: "Vector dimension (default: 1536 for OpenAI embeddings)",
     },
     timeout: {
-      type: 'number',
+      type: "number",
       default: 30000,
-      description: 'Request timeout in milliseconds',
+      description: "Request timeout in milliseconds",
     },
   },
 };

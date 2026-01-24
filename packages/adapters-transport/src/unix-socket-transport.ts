@@ -17,17 +17,16 @@
  * ```
  */
 
-import * as net from 'net';
-import { randomUUID } from 'crypto';
-import type { AdapterCall, AdapterResponse } from './types.js';
-import { isAdapterResponse } from './types.js';
+import * as net from "net";
+import type { AdapterCall, AdapterResponse } from "./types.js";
+import { isAdapterResponse } from "./types.js";
 import {
   type ITransport,
   type TransportConfig,
   type PendingRequest,
   TransportError,
   TimeoutError,
-} from './transport.js';
+} from "./transport.js";
 
 /**
  * Configuration for Unix Socket transport.
@@ -59,7 +58,7 @@ export class UnixSocketTransport implements ITransport {
   private pending = new Map<string, PendingRequest>();
   private closed = false;
   private connecting = false;
-  private buffer = '';
+  private buffer = "";
   private reconnectAttempts = 0;
 
   constructor(private config: UnixSocketConfig = {}) {}
@@ -75,42 +74,52 @@ export class UnixSocketTransport implements ITransport {
 
     if (this.connecting) {
       // Wait for existing connection attempt
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
       return this.connect();
     }
 
     this.connecting = true;
 
     return new Promise((resolve, reject) => {
-      const socketPath = this.config.socketPath ?? '/tmp/kb-ipc.sock';
+      const socketPath = this.config.socketPath ?? "/tmp/kb-ipc.sock";
 
       this.socket = net.connect(socketPath);
 
-      this.socket.on('connect', () => {
+      this.socket.on("connect", () => {
         this.connecting = false;
         this.reconnectAttempts = 0;
         resolve();
       });
 
-      this.socket.on('error', (error) => {
+      this.socket.on("error", (error) => {
         this.connecting = false;
 
         // Try reconnect if enabled
         const maxAttempts = this.config.maxReconnectAttempts ?? 3;
-        if (this.config.autoReconnect !== false && this.reconnectAttempts < maxAttempts) {
+        if (
+          this.config.autoReconnect !== false &&
+          this.reconnectAttempts < maxAttempts
+        ) {
           this.reconnectAttempts++;
           setTimeout(() => this.connect(), 1000 * this.reconnectAttempts);
           return;
         }
 
-        reject(new TransportError(`Unix socket connection failed: ${error.message}`, error));
+        reject(
+          new TransportError(
+            `Unix socket connection failed: ${error.message}`,
+            error,
+          ),
+        );
       });
 
-      this.socket.on('data', (data) => {
+      this.socket.on("data", (data) => {
         this.handleData(data);
       });
 
-      this.socket.on('close', () => {
+      this.socket.on("close", () => {
         if (!this.closed && this.config.autoReconnect !== false) {
           // Unexpected close, try reconnect
           setTimeout(() => this.connect(), 1000);
@@ -121,14 +130,14 @@ export class UnixSocketTransport implements ITransport {
 
   async send(call: AdapterCall): Promise<AdapterResponse> {
     if (this.closed) {
-      throw new TransportError('Transport is closed');
+      throw new TransportError("Transport is closed");
     }
 
     // Ensure connected
     await this.connect();
 
     if (!this.socket || this.socket.destroyed) {
-      throw new TransportError('Socket not available');
+      throw new TransportError("Socket not available");
     }
 
     // Determine timeout
@@ -138,22 +147,32 @@ export class UnixSocketTransport implements ITransport {
       // Create timeout timer
       const timer = setTimeout(() => {
         this.pending.delete(call.requestId);
-        reject(new TimeoutError(`Adapter call timed out after ${timeout}ms`, timeout));
+        reject(
+          new TimeoutError(
+            `Adapter call timed out after ${timeout}ms`,
+            timeout,
+          ),
+        );
       }, timeout);
 
       // Store pending request
       this.pending.set(call.requestId, { resolve, reject, timer });
 
       // Send via Unix socket (newline-delimited JSON)
-      const message = JSON.stringify(call) + '\n';
+      const message = JSON.stringify(call) + "\n";
 
-      const written = this.socket!.write(message, 'utf8', (error) => {
+      const written = this.socket!.write(message, "utf8", (error) => {
         if (error) {
           const pending = this.pending.get(call.requestId);
           if (pending) {
             clearTimeout(pending.timer);
             this.pending.delete(call.requestId);
-            reject(new TransportError(`Failed to write to socket: ${error.message}`, error));
+            reject(
+              new TransportError(
+                `Failed to write to socket: ${error.message}`,
+                error,
+              ),
+            );
           }
         }
       });
@@ -161,7 +180,7 @@ export class UnixSocketTransport implements ITransport {
       // Unix sockets handle backpressure via TCP flow control
       // If write() returns false, 'drain' event will fire when ready
       if (!written) {
-        this.socket!.once('drain', () => {
+        this.socket!.once("drain", () => {
           // Socket ready for more data (TCP handled backpressure)
         });
       }
@@ -173,11 +192,11 @@ export class UnixSocketTransport implements ITransport {
    * Messages are newline-delimited JSON.
    */
   private handleData(data: Buffer): void {
-    this.buffer += data.toString('utf8');
+    this.buffer += data.toString("utf8");
 
     // Process all complete messages (newline-delimited)
     let newlineIndex: number;
-    while ((newlineIndex = this.buffer.indexOf('\n')) !== -1) {
+    while ((newlineIndex = this.buffer.indexOf("\n")) !== -1) {
       const line = this.buffer.slice(0, newlineIndex);
       this.buffer = this.buffer.slice(newlineIndex + 1);
 
@@ -189,7 +208,7 @@ export class UnixSocketTransport implements ITransport {
         const msg = JSON.parse(line);
         this.handleMessage(msg);
       } catch (error) {
-        console.error('[UnixSocketTransport] Failed to parse message:', error);
+        console.error("[UnixSocketTransport] Failed to parse message:", error);
       }
     }
   }
@@ -229,9 +248,9 @@ export class UnixSocketTransport implements ITransport {
     }
 
     // Reject all pending requests
-    for (const [requestId, pending] of this.pending) {
+    for (const [_requestId, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new TransportError('Transport closed'));
+      pending.reject(new TransportError("Transport closed"));
     }
     this.pending.clear();
   }
@@ -254,6 +273,8 @@ export class UnixSocketTransport implements ITransport {
  * });
  * ```
  */
-export function createUnixSocketTransport(config?: UnixSocketConfig): UnixSocketTransport {
+export function createUnixSocketTransport(
+  config?: UnixSocketConfig,
+): UnixSocketTransport {
   return new UnixSocketTransport(config);
 }

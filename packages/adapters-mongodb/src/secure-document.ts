@@ -30,7 +30,7 @@ import type {
   DocumentFilter,
   DocumentUpdate,
   FindOptions,
-} from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
 
 /**
  * Permission configuration for document database access.
@@ -71,10 +71,12 @@ export class DocumentPermissionError extends Error {
   constructor(
     public readonly operation: string,
     public readonly collection: string,
-    public readonly reason: string
+    public readonly reason: string,
   ) {
-    super(`Document database access denied: ${operation} on '${collection}' - ${reason}`);
-    this.name = 'DocumentPermissionError';
+    super(
+      `Document database access denied: ${operation} on '${collection}' - ${reason}`,
+    );
+    this.name = "DocumentPermissionError";
   }
 }
 
@@ -90,20 +92,23 @@ export class DocumentPermissionError extends Error {
 export class SecureDocumentAdapter implements IDocumentDatabase {
   constructor(
     private readonly baseDb: IDocumentDatabase,
-    private readonly permissions: DocumentPermissions
+    private readonly permissions: DocumentPermissions,
   ) {}
 
   /**
    * Check if a collection is allowed by permissions.
    */
-  private checkCollection(collection: string, operation: 'read' | 'write' | 'delete'): void {
+  private checkCollection(
+    collection: string,
+    operation: "read" | "write" | "delete",
+  ): void {
     // Check operation-level permissions
     const operationAllowed = this.permissions[operation] !== false;
     if (!operationAllowed) {
       throw new DocumentPermissionError(
         operation,
         collection,
-        `${operation} operations are disabled`
+        `${operation} operations are disabled`,
       );
     }
 
@@ -113,7 +118,7 @@ export class SecureDocumentAdapter implements IDocumentDatabase {
         throw new DocumentPermissionError(
           operation,
           collection,
-          `collection is in denylist`
+          `collection is in denylist`,
         );
       }
     }
@@ -124,7 +129,7 @@ export class SecureDocumentAdapter implements IDocumentDatabase {
         throw new DocumentPermissionError(
           operation,
           collection,
-          `collection not in allowlist: [${this.permissions.allowlist.join(', ')}]`
+          `collection not in allowlist: [${this.permissions.allowlist.join(", ")}]`,
         );
       }
     }
@@ -137,61 +142,64 @@ export class SecureDocumentAdapter implements IDocumentDatabase {
   async find<T extends BaseDocument>(
     collection: string,
     filter: DocumentFilter<T>,
-    options?: FindOptions
+    options?: FindOptions,
   ): Promise<T[]> {
-    this.checkCollection(collection, 'read');
+    this.checkCollection(collection, "read");
     return this.baseDb.find<T>(collection, filter, options);
   }
 
-  async findById<T extends BaseDocument>(collection: string, id: string): Promise<T | null> {
-    this.checkCollection(collection, 'read');
+  async findById<T extends BaseDocument>(
+    collection: string,
+    id: string,
+  ): Promise<T | null> {
+    this.checkCollection(collection, "read");
     return this.baseDb.findById<T>(collection, id);
   }
 
   async insertOne<T extends BaseDocument>(
     collection: string,
-    document: Omit<T, 'id' | 'createdAt' | 'updatedAt'>
+    document: Omit<T, "id" | "createdAt" | "updatedAt">,
   ): Promise<T> {
-    this.checkCollection(collection, 'write');
+    this.checkCollection(collection, "write");
     return this.baseDb.insertOne<T>(collection, document);
   }
 
   async updateMany<T extends BaseDocument>(
     collection: string,
     filter: DocumentFilter<T>,
-    update: DocumentUpdate<T>
+    update: DocumentUpdate<T>,
   ): Promise<number> {
-    this.checkCollection(collection, 'write');
+    this.checkCollection(collection, "write");
     return this.baseDb.updateMany<T>(collection, filter, update);
   }
 
   async updateById<T extends BaseDocument>(
     collection: string,
     id: string,
-    update: DocumentUpdate<T>
+    update: DocumentUpdate<T>,
   ): Promise<T | null> {
-    this.checkCollection(collection, 'write');
+    this.checkCollection(collection, "write");
     return this.baseDb.updateById<T>(collection, id, update);
   }
 
   async deleteMany<T extends BaseDocument>(
     collection: string,
-    filter: DocumentFilter<T>
+    filter: DocumentFilter<T>,
   ): Promise<number> {
-    this.checkCollection(collection, 'delete');
+    this.checkCollection(collection, "delete");
     return this.baseDb.deleteMany<T>(collection, filter);
   }
 
   async deleteById(collection: string, id: string): Promise<boolean> {
-    this.checkCollection(collection, 'delete');
+    this.checkCollection(collection, "delete");
     return this.baseDb.deleteById(collection, id);
   }
 
   async count<T extends BaseDocument>(
     collection: string,
-    filter: DocumentFilter<T>
+    filter: DocumentFilter<T>,
   ): Promise<number> {
-    this.checkCollection(collection, 'read');
+    this.checkCollection(collection, "read");
     return this.baseDb.count<T>(collection, filter);
   }
 
@@ -218,7 +226,7 @@ export class SecureDocumentAdapter implements IDocumentDatabase {
  */
 export function createSecureDocument(
   baseDb: IDocumentDatabase,
-  permissions: DocumentPermissions
+  permissions: DocumentPermissions,
 ): SecureDocumentAdapter {
   return new SecureDocumentAdapter(baseDb, permissions);
 }

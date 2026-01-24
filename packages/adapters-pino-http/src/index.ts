@@ -31,7 +31,7 @@
  * ```
  */
 
-import build from 'pino-abstract-transport';
+import build from "pino-abstract-transport";
 
 /**
  * Configuration for HTTP transport
@@ -67,7 +67,7 @@ export interface HTTPTransportOptions {
  */
 export default async function (opts: HTTPTransportOptions) {
   const config = {
-    url: opts.url || 'http://localhost:5050/api/v1/logs/ingest',
+    url: opts.url || "http://localhost:5050/api/v1/logs/ingest",
     batchSize: opts.batchSize || 50,
     flushIntervalMs: opts.flushIntervalMs || 3000,
     retryAttempts: opts.retryAttempts || 3,
@@ -84,7 +84,9 @@ export default async function (opts: HTTPTransportOptions) {
    * Send batch to REST API with retry logic
    */
   const flush = async (): Promise<void> => {
-    if (batch.length === 0) return;
+    if (batch.length === 0) {
+      return;
+    }
 
     // Copy batch and clear immediately to avoid blocking
     const logs = [...batch];
@@ -98,9 +100,9 @@ export default async function (opts: HTTPTransportOptions) {
     for (let attempt = 0; attempt < config.retryAttempts; attempt++) {
       try {
         const response = await fetch(config.url, {
-          method: 'POST',
+          method: "POST",
           headers: {
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
             ...config.headers,
           },
           body: JSON.stringify(logs),
@@ -111,7 +113,7 @@ export default async function (opts: HTTPTransportOptions) {
         }
 
         if (config.debug) {
-          console.error('[PinoHTTP] Flush successful');
+          console.error("[PinoHTTP] Flush successful");
         }
 
         return; // Success!
@@ -119,7 +121,7 @@ export default async function (opts: HTTPTransportOptions) {
         const isLastAttempt = attempt === config.retryAttempts - 1;
 
         if (isLastAttempt) {
-          console.error('[PinoHTTP] Failed to send logs after retries:', error);
+          console.error("[PinoHTTP] Failed to send logs after retries:", error);
           return; // Give up after max retries
         }
 
@@ -127,10 +129,14 @@ export default async function (opts: HTTPTransportOptions) {
         const delayMs = config.retryDelayMs * Math.pow(2, attempt);
 
         if (config.debug) {
-          console.error(`[PinoHTTP] Retry ${attempt + 1}/${config.retryAttempts} after ${delayMs}ms`);
+          console.error(
+            `[PinoHTTP] Retry ${attempt + 1}/${config.retryAttempts} after ${delayMs}ms`,
+          );
         }
 
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        await new Promise((resolve) => {
+          setTimeout(resolve, delayMs);
+        });
       }
     }
   };
@@ -139,7 +145,9 @@ export default async function (opts: HTTPTransportOptions) {
    * Schedule next flush
    */
   const scheduleFlush = (): void => {
-    if (flushTimer !== null) return; // Timer already scheduled
+    if (flushTimer !== null) {
+      return;
+    } // Timer already scheduled
 
     flushTimer = setTimeout(() => {
       flushTimer = null;
@@ -151,11 +159,13 @@ export default async function (opts: HTTPTransportOptions) {
    * Graceful shutdown: flush pending logs before exit
    */
   const shutdown = async (): Promise<void> => {
-    if (isShuttingDown) return;
+    if (isShuttingDown) {
+      return;
+    }
     isShuttingDown = true;
 
     if (config.debug) {
-      console.error('[PinoHTTP] Shutting down, flushing pending logs...');
+      console.error("[PinoHTTP] Shutting down, flushing pending logs...");
     }
 
     // Clear timer
@@ -168,14 +178,14 @@ export default async function (opts: HTTPTransportOptions) {
     await flush();
 
     if (config.debug) {
-      console.error('[PinoHTTP] Shutdown complete');
+      console.error("[PinoHTTP] Shutdown complete");
     }
   };
 
   // Register shutdown handlers
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
-  process.on('beforeExit', shutdown);
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+  process.on("beforeExit", shutdown);
 
   /**
    * Build abstract transport stream
@@ -212,6 +222,6 @@ export default async function (opts: HTTPTransportOptions) {
       close: async () => {
         await shutdown();
       },
-    }
+    },
   );
 }

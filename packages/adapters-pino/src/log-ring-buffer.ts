@@ -3,7 +3,12 @@
  * Ring buffer for in-memory log storage with real-time streaming
  */
 
-import type { LogRecord, LogQuery, ILogBuffer, LogLevel } from '@kb-labs/core-platform';
+import type {
+  LogRecord,
+  LogQuery,
+  ILogBuffer,
+  LogLevel,
+} from "@kb-labs/core-platform";
 
 /**
  * Ring buffer implementation for log storage
@@ -44,7 +49,7 @@ export class LogRingBuffer implements ILogBuffer {
         subscriber(record);
       } catch (error) {
         // Ignore subscriber errors
-        console.error('[LogRingBuffer] Subscriber error:', error);
+        console.error("[LogRingBuffer] Subscriber error:", error);
       }
     }
   }
@@ -74,7 +79,14 @@ export class LogRingBuffer implements ILogBuffer {
 
     // Filter by level (minimum level)
     if (query.level !== undefined) {
-      const levels: LogLevel[] = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'];
+      const levels: LogLevel[] = [
+        "trace",
+        "debug",
+        "info",
+        "warn",
+        "error",
+        "fatal",
+      ];
       const minLevelIndex = levels.indexOf(query.level);
       results = results.filter((r) => {
         const recordLevelIndex = levels.indexOf(r.level);
@@ -119,8 +131,12 @@ export class LogRingBuffer implements ILogBuffer {
     return {
       total: this.buffer.length,
       bufferSize: this.maxSize,
-      oldestTimestamp: this.buffer.length > 0 ? this.buffer[0]!.timestamp : null,
-      newestTimestamp: this.buffer.length > 0 ? this.buffer[this.buffer.length - 1]!.timestamp : null,
+      oldestTimestamp:
+        this.buffer.length > 0 ? this.buffer[0]!.timestamp : null,
+      newestTimestamp:
+        this.buffer.length > 0
+          ? this.buffer[this.buffer.length - 1]!.timestamp
+          : null,
     };
   }
 }

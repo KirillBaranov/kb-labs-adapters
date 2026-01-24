@@ -24,7 +24,10 @@
  * ```
  */
 
-import type { IStorage, StorageMetadata } from '@kb-labs/core-platform/adapters';
+import type {
+  IStorage,
+  StorageMetadata,
+} from "@kb-labs/core-platform/adapters";
 
 /**
  * Permission configuration for storage access.
@@ -65,10 +68,10 @@ export class StoragePermissionError extends Error {
   constructor(
     public readonly operation: string,
     public readonly path: string,
-    public readonly reason: string
+    public readonly reason: string,
   ) {
     super(`Storage access denied: ${operation} ${path} - ${reason}`);
-    this.name = 'StoragePermissionError';
+    this.name = "StoragePermissionError";
   }
 }
 
@@ -84,20 +87,23 @@ export class StoragePermissionError extends Error {
 export class SecureStorageAdapter implements IStorage {
   constructor(
     private readonly baseStorage: IStorage,
-    private readonly permissions: StoragePermissions
+    private readonly permissions: StoragePermissions,
   ) {}
 
   /**
    * Check if a path is allowed by permissions.
    */
-  private checkPath(path: string, operation: 'read' | 'write' | 'delete'): void {
+  private checkPath(
+    path: string,
+    operation: "read" | "write" | "delete",
+  ): void {
     // Check operation-level permissions
     const operationAllowed = this.permissions[operation] !== false;
     if (!operationAllowed) {
       throw new StoragePermissionError(
         operation,
         path,
-        `${operation} operations are disabled`
+        `${operation} operations are disabled`,
       );
     }
 
@@ -108,7 +114,7 @@ export class SecureStorageAdapter implements IStorage {
           throw new StoragePermissionError(
             operation,
             path,
-            `path matches denylist: ${denied}`
+            `path matches denylist: ${denied}`,
           );
         }
       }
@@ -128,7 +134,7 @@ export class SecureStorageAdapter implements IStorage {
         throw new StoragePermissionError(
           operation,
           path,
-          `path not in allowlist: [${this.permissions.allowlist.join(', ')}]`
+          `path not in allowlist: [${this.permissions.allowlist.join(", ")}]`,
         );
       }
     }
@@ -139,28 +145,28 @@ export class SecureStorageAdapter implements IStorage {
   // ═══════════════════════════════════════════════════════════════════════
 
   async read(path: string): Promise<Buffer | null> {
-    this.checkPath(path, 'read');
+    this.checkPath(path, "read");
     return this.baseStorage.read(path);
   }
 
   async write(path: string, data: Buffer): Promise<void> {
-    this.checkPath(path, 'write');
+    this.checkPath(path, "write");
     await this.baseStorage.write(path, data);
   }
 
   async delete(path: string): Promise<void> {
-    this.checkPath(path, 'delete');
+    this.checkPath(path, "delete");
     await this.baseStorage.delete(path);
   }
 
   async list(prefix: string): Promise<string[]> {
-    this.checkPath(prefix, 'read');
+    this.checkPath(prefix, "read");
     const files = await this.baseStorage.list(prefix);
 
     // Filter results by permissions (double-check each file)
     return files.filter((file) => {
       try {
-        this.checkPath(file, 'read');
+        this.checkPath(file, "read");
         return true;
       } catch {
         return false; // Silently exclude files that don't pass permission check
@@ -170,7 +176,7 @@ export class SecureStorageAdapter implements IStorage {
 
   async exists(path: string): Promise<boolean> {
     try {
-      this.checkPath(path, 'read');
+      this.checkPath(path, "read");
       return await this.baseStorage.exists(path);
     } catch (error) {
       if (error instanceof StoragePermissionError) {
@@ -189,28 +195,28 @@ export class SecureStorageAdapter implements IStorage {
       return null;
     }
 
-    this.checkPath(path, 'read');
+    this.checkPath(path, "read");
     return this.baseStorage.stat(path);
   }
 
   async copy?(sourcePath: string, destPath: string): Promise<void> {
     if (!this.baseStorage.copy) {
-      throw new Error('copy() not supported by base storage adapter');
+      throw new Error("copy() not supported by base storage adapter");
     }
 
-    this.checkPath(sourcePath, 'read');
-    this.checkPath(destPath, 'write');
+    this.checkPath(sourcePath, "read");
+    this.checkPath(destPath, "write");
     await this.baseStorage.copy(sourcePath, destPath);
   }
 
   async move?(sourcePath: string, destPath: string): Promise<void> {
     if (!this.baseStorage.move) {
-      throw new Error('move() not supported by base storage adapter');
+      throw new Error("move() not supported by base storage adapter");
     }
 
-    this.checkPath(sourcePath, 'read');
-    this.checkPath(sourcePath, 'delete'); // Move = read + delete source
-    this.checkPath(destPath, 'write');
+    this.checkPath(sourcePath, "read");
+    this.checkPath(sourcePath, "delete"); // Move = read + delete source
+    this.checkPath(destPath, "write");
     await this.baseStorage.move(sourcePath, destPath);
   }
 
@@ -219,13 +225,13 @@ export class SecureStorageAdapter implements IStorage {
       return [];
     }
 
-    this.checkPath(prefix, 'read');
+    this.checkPath(prefix, "read");
     const files = await this.baseStorage.listWithMetadata(prefix);
 
     // Filter results by permissions (double-check each file)
     return files.filter((file) => {
       try {
-        this.checkPath(file.path, 'read');
+        this.checkPath(file.path, "read");
         return true;
       } catch {
         return false; // Silently exclude files that don't pass permission check
@@ -252,7 +258,7 @@ export class SecureStorageAdapter implements IStorage {
  */
 export function createSecureStorage(
   baseStorage: IStorage,
-  permissions: StoragePermissions
+  permissions: StoragePermissions,
 ): SecureStorageAdapter {
   return new SecureStorageAdapter(baseStorage, permissions);
 }

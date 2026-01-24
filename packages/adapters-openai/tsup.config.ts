@@ -1,10 +1,9 @@
 import { defineConfig } from 'tsup';
+import nodePreset from '@kb-labs/devkit/tsup/node';
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/llm.ts', 'src/embeddings.ts', 'src/manifest.ts', 'src/embeddings-manifest.ts'],
-  format: ['esm'],
+  ...nodePreset,
+  tsconfig: 'tsconfig.build.json',
+  entry: ['src/index.ts', 'src/manifest.ts'],
   dts: true,
-  clean: true,
-  sourcemap: true,
-  target: 'es2022',
 });

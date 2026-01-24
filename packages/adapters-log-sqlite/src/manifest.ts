@@ -3,29 +3,29 @@
  * Adapter manifest for SQLite log persistence extension.
  */
 
-import type { AdapterManifest } from '@kb-labs/core-platform';
+import type { AdapterManifest } from "@kb-labs/core-platform";
 
 /**
  * Adapter manifest for SQLite log persistence extension.
  */
 export const manifest: AdapterManifest = {
-  manifestVersion: '1.0.0',
-  id: 'log-persistence',
-  name: 'SQLite Log Persistence',
-  version: '1.0.0',
-  description: 'SQLite persistence for historical log storage and search',
-  author: 'KB Labs',
-  license: 'MIT',
-  type: 'extension',
-  implements: 'ILogPersistence',
+  manifestVersion: "1.0.0",
+  id: "log-persistence",
+  name: "SQLite Log Persistence",
+  version: "1.0.0",
+  description: "SQLite persistence for historical log storage and search",
+  author: "KB Labs",
+  license: "MIT",
+  type: "extension",
+  implements: "ILogPersistence",
   requires: {
-    adapters: [{ id: 'db', alias: 'database' }],
-    platform: '>= 1.0.0',
+    adapters: [{ id: "db", alias: "database" }],
+    platform: ">= 1.0.0",
   },
   extends: {
-    adapter: 'logger',
-    hook: 'onLog',
-    method: 'write',
+    adapter: "logger",
+    hook: "onLog",
+    method: "write",
     priority: 5,
   },
   capabilities: {

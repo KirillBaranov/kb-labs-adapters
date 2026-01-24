@@ -4,10 +4,10 @@
  */
 
 // Re-export LLM adapter as default
-export { OpenAILLM, type OpenAILLMConfig, createAdapter } from './llm.js';
+export { OpenAILLM, type OpenAILLMConfig, createAdapter } from "./llm.js";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 // Default export
-export { createAdapter as default } from './llm.js';
+export { createAdapter as default } from "./llm.js";

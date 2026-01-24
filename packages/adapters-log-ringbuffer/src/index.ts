@@ -45,10 +45,10 @@ import type {
   LogRingBufferConfig,
   LogRecord,
   LogQuery,
-} from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
+export { manifest } from "./manifest.js";
 
 /**
  * In-memory ring buffer for log streaming.
@@ -189,7 +189,7 @@ export class LogRingBufferAdapter implements ILogRingBuffer {
         callback(record);
       } catch (error) {
         // Don't let subscriber errors crash the buffer
-        console.error('Error in log buffer subscriber:', error);
+        console.error("Error in log buffer subscriber:", error);
       }
     });
   }
@@ -202,7 +202,9 @@ export class LogRingBufferAdapter implements ILogRingBuffer {
  * @param config - Ring buffer configuration
  * @returns Ring buffer adapter instance
  */
-export function createAdapter(config?: LogRingBufferConfig): LogRingBufferAdapter {
+export function createAdapter(
+  config?: LogRingBufferConfig,
+): LogRingBufferAdapter {
   return new LogRingBufferAdapter(config);
 }
 

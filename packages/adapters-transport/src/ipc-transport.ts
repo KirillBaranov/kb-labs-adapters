@@ -30,16 +30,15 @@
  * ```
  */
 
-import { randomUUID } from 'crypto';
-import type { AdapterCall, AdapterResponse } from './types.js';
-import { isAdapterResponse } from './types.js';
+import type { AdapterCall, AdapterResponse } from "./types.js";
+import { isAdapterResponse } from "./types.js";
 import {
   type ITransport,
   type TransportConfig,
   type PendingRequest,
   TransportError,
   TimeoutError,
-} from './transport.js';
+} from "./transport.js";
 
 // Re-export TransportConfig for convenience
 export type { TransportConfig };
@@ -70,19 +69,19 @@ export class IPCTransport implements ITransport {
     this.messageHandler = this.handleMessage.bind(this);
 
     // Listen for responses from parent
-    process.on('message', this.messageHandler);
+    process.on("message", this.messageHandler);
 
     // Check if IPC channel is available
     if (!process.send) {
       throw new TransportError(
-        'No IPC channel available. IPCTransport can only be used in forked child processes.'
+        "No IPC channel available. IPCTransport can only be used in forked child processes.",
       );
     }
   }
 
   async send(call: AdapterCall): Promise<AdapterResponse> {
     if (this.closed) {
-      throw new TransportError('Transport is closed');
+      throw new TransportError("Transport is closed");
     }
 
     // Determine timeout (call-specific > config default > 30s)
@@ -92,7 +91,12 @@ export class IPCTransport implements ITransport {
       // Create timeout timer
       const timer = setTimeout(() => {
         this.pending.delete(call.requestId);
-        reject(new TimeoutError(`Adapter call timed out after ${timeout}ms`, timeout));
+        reject(
+          new TimeoutError(
+            `Adapter call timed out after ${timeout}ms`,
+            timeout,
+          ),
+        );
       }, timeout);
 
       // Store pending request
@@ -119,7 +123,10 @@ export class IPCTransport implements ITransport {
    * @param call - Adapter call to send
    * @param retryCount - Current retry attempt (for exponential backoff)
    */
-  private async trySendWithBackpressure(call: AdapterCall, retryCount: number): Promise<void> {
+  private async trySendWithBackpressure(
+    call: AdapterCall,
+    retryCount: number,
+  ): Promise<void> {
     const maxRetries = 20;
     const baseDelayMs = 50;
 
@@ -136,23 +143,27 @@ export class IPCTransport implements ITransport {
       // Backpressure detected
       if (retryCount >= maxRetries) {
         throw new TransportError(
-          `Failed to send IPC message after ${maxRetries} retries: persistent backpressure`
+          `Failed to send IPC message after ${maxRetries} retries: persistent backpressure`,
         );
       }
 
       // Wait with exponential backoff (sleep instead of drain event)
       const delay = Math.min(baseDelayMs * Math.pow(1.5, retryCount), 5000); // Cap at 5s
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => {
+        setTimeout(resolve, delay);
+      });
 
       // Retry sending
       return this.trySendWithBackpressure(call, retryCount + 1);
-
     } catch (error) {
       // Synchronous error (e.g., message too large, serialization error, channel closed)
       if (error instanceof TransportError) {
         throw error;
       }
-      throw new TransportError(`Failed to send IPC message: ${error}`, error as Error);
+      throw new TransportError(
+        `Failed to send IPC message: ${error}`,
+        error as Error,
+      );
     }
   }
 
@@ -185,12 +196,12 @@ export class IPCTransport implements ITransport {
     this.closed = true;
 
     // Remove message listener
-    process.off('message', this.messageHandler);
+    process.off("message", this.messageHandler);
 
     // Reject all pending requests
-    for (const [requestId, pending] of this.pending) {
+    for (const [_requestId, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(new TransportError('Transport closed'));
+      pending.reject(new TransportError("Transport closed"));
     }
     this.pending.clear();
   }

@@ -21,17 +21,17 @@
  * ```
  */
 
-import { QdrantClient } from '@qdrant/js-client-rest';
+import { QdrantClient } from "@qdrant/js-client-rest";
 import type {
   IVectorStore,
   VectorRecord,
   VectorSearchResult,
   VectorFilter,
-} from '@kb-labs/core-platform';
+} from "@kb-labs/core-platform";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
-import { createHash } from 'node:crypto';
+export { manifest } from "./manifest.js";
+import { createHash } from "node:crypto";
 
 /**
  * Configuration for Qdrant vector store adapter.
@@ -54,15 +54,15 @@ export interface QdrantVectorStoreConfig {
  * Qdrant requires point IDs to be either unsigned integers or UUIDs.
  */
 function stringToUUID(str: string): string {
-  const hash = createHash('sha256').update(str).digest();
+  const hash = createHash("sha256").update(str).digest();
   // Format as UUID v4 (8-4-4-4-12 hex digits)
   const uuid = [
-    hash.slice(0, 4).toString('hex'),
-    hash.slice(4, 6).toString('hex'),
-    hash.slice(6, 8).toString('hex'),
-    hash.slice(8, 10).toString('hex'),
-    hash.slice(10, 16).toString('hex'),
-  ].join('-');
+    hash.slice(0, 4).toString("hex"),
+    hash.slice(4, 6).toString("hex"),
+    hash.slice(6, 8).toString("hex"),
+    hash.slice(8, 10).toString("hex"),
+    hash.slice(10, 16).toString("hex"),
+  ].join("-");
   return uuid;
 }
 
@@ -88,7 +88,7 @@ export class QdrantVectorStore implements IVectorStore {
       apiKey: config.apiKey,
       timeout: config.timeout ?? 30000,
     });
-    this.collectionName = config.collectionName ?? 'kb-vectors';
+    this.collectionName = config.collectionName ?? "kb-vectors";
     this.dimension = config.dimension ?? 1536;
   }
 
@@ -96,7 +96,9 @@ export class QdrantVectorStore implements IVectorStore {
    * Ensure collection exists with correct configuration.
    */
   private async ensureCollection(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) {
+      return;
+    }
 
     try {
       // Check if collection exists
@@ -110,7 +112,7 @@ export class QdrantVectorStore implements IVectorStore {
         await this.client.createCollection(this.collectionName, {
           vectors: {
             size: this.dimension,
-            distance: 'Cosine',
+            distance: "Cosine",
           },
         });
       }
@@ -137,13 +139,11 @@ export class QdrantVectorStore implements IVectorStore {
             {
               key: filter.field,
               match:
-                filter.operator === 'eq'
-                  ? { value: filter.value }
-                  : undefined,
+                filter.operator === "eq" ? { value: filter.value } : undefined,
               range:
-                filter.operator === 'gt' || filter.operator === 'gte'
+                filter.operator === "gt" || filter.operator === "gte"
                   ? { gt: filter.value }
-                  : filter.operator === 'lt' || filter.operator === 'lte'
+                  : filter.operator === "lt" || filter.operator === "lte"
                     ? { lt: filter.value }
                     : undefined,
             },
@@ -168,7 +168,9 @@ export class QdrantVectorStore implements IVectorStore {
   async upsert(vectors: VectorRecord[]): Promise<void> {
     await this.ensureCollection();
 
-    if (vectors.length === 0) return;
+    if (vectors.length === 0) {
+      return;
+    }
 
     const points = vectors.map((record) => ({
       id: stringToUUID(record.id),
@@ -178,10 +180,14 @@ export class QdrantVectorStore implements IVectorStore {
 
     // Batch upsert with adaptive parallel processing (Qdrant supports up to 100 points per request)
     const batchSize = 100;
-    const totalBatches = Math.ceil(points.length / batchSize);
+    const _totalBatches = Math.ceil(points.length / batchSize);
 
     // Create all batches
-    type QdrantPoint = { id: string; vector: number[]; payload: Record<string, unknown> };
+    type QdrantPoint = {
+      id: string;
+      vector: number[];
+      payload: Record<string, unknown>;
+    };
     const batches: QdrantPoint[][] = [];
     for (let i = 0; i < points.length; i += batchSize) {
       batches.push(points.slice(i, i + batchSize) as QdrantPoint[]);
@@ -190,8 +196,14 @@ export class QdrantVectorStore implements IVectorStore {
     // Process batches with adaptive concurrency
     let batchIndex = 0;
     while (batchIndex < batches.length) {
-      const currentConcurrency = Math.min(this.concurrency, batches.length - batchIndex);
-      const batchGroup = batches.slice(batchIndex, batchIndex + currentConcurrency);
+      const currentConcurrency = Math.min(
+        this.concurrency,
+        batches.length - batchIndex,
+      );
+      const batchGroup = batches.slice(
+        batchIndex,
+        batchIndex + currentConcurrency,
+      );
 
       const batchPromises = batchGroup.map(async (batch) => {
         try {
@@ -224,7 +236,7 @@ export class QdrantVectorStore implements IVectorStore {
       try {
         await Promise.all(batchPromises);
         batchIndex += batchGroup.length;
-      } catch (error) {
+      } catch (_error) {
         // If group fails, retry with reduced concurrency (already adjusted above)
         // Don't increment batchIndex - retry same batches
       }
@@ -234,7 +246,9 @@ export class QdrantVectorStore implements IVectorStore {
   async delete(ids: string[]): Promise<void> {
     await this.ensureCollection();
 
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      return;
+    }
 
     const uuids = ids.map(stringToUUID);
 
@@ -259,7 +273,9 @@ export class QdrantVectorStore implements IVectorStore {
   async get(ids: string[]): Promise<VectorRecord[]> {
     await this.ensureCollection();
 
-    if (ids.length === 0) return [];
+    if (ids.length === 0) {
+      return [];
+    }
 
     const response = await this.client.retrieve(this.collectionName, {
       ids: ids.map((id) => stringToUUID(id)),
@@ -301,21 +317,31 @@ export class QdrantVectorStore implements IVectorStore {
    * Convert platform VectorFilter to Qdrant filter format.
    */
   private convertFilter(filter: VectorFilter): any {
-    const fieldParts = filter.field.split('.');
+    const fieldParts = filter.field.split(".");
     const fieldName = fieldParts[fieldParts.length - 1]; // Get last part after dots
 
     switch (filter.operator) {
-      case 'eq':
+      case "eq":
         return { must: [{ key: fieldName, match: { value: filter.value } }] };
-      case 'ne':
-        return { must_not: [{ key: fieldName, match: { value: filter.value } }] };
-      case 'in':
-        return { must: [{ key: fieldName, match: { any: filter.value as any[] } }] };
-      case 'nin':
-        return { must_not: [{ key: fieldName, match: { any: filter.value as any[] } }] };
+      case "ne":
+        return {
+          must_not: [{ key: fieldName, match: { value: filter.value } }],
+        };
+      case "in":
+        return {
+          must: [{ key: fieldName, match: { any: filter.value as any[] } }],
+        };
+      case "nin":
+        return {
+          must_not: [{ key: fieldName, match: { any: filter.value as any[] } }],
+        };
       default:
         // For gt/gte/lt/lte - use range filter
-        return { must: [{ key: fieldName, range: { [filter.operator]: filter.value } }] };
+        return {
+          must: [
+            { key: fieldName, range: { [filter.operator]: filter.value } },
+          ],
+        };
     }
   }
 }
@@ -324,8 +350,10 @@ export class QdrantVectorStore implements IVectorStore {
  * Create Qdrant vector store adapter.
  * This is the factory function called by initPlatform() when loading adapters.
  */
-export function createAdapter(config?: QdrantVectorStoreConfig): QdrantVectorStore {
-  const fallbackUrl = process.env.QDRANT_URL ?? 'http://localhost:6333';
+export function createAdapter(
+  config?: QdrantVectorStoreConfig,
+): QdrantVectorStore {
+  const fallbackUrl = process.env.QDRANT_URL ?? "http://localhost:6333";
   const finalConfig: QdrantVectorStoreConfig = {
     url: config?.url ?? fallbackUrl,
     apiKey: config?.apiKey ?? process.env.QDRANT_API_KEY,

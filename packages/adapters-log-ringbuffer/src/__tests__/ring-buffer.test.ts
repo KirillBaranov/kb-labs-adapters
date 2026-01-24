@@ -2,25 +2,25 @@
  * Tests for LogRingBufferAdapter
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { LogRingBufferAdapter } from '../index.ts';
-import type { LogRecord } from '@kb-labs/core-platform/adapters';
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { LogRingBufferAdapter } from "../index";
+import type { LogRecord } from "@kb-labs/core-platform/adapters";
 
-describe('LogRingBufferAdapter', () => {
+describe("LogRingBufferAdapter", () => {
   let buffer: LogRingBufferAdapter;
 
   beforeEach(() => {
     buffer = new LogRingBufferAdapter({ maxSize: 5, ttl: 60000 }); // 60s TTL for testing
   });
 
-  describe('append', () => {
-    it('should append logs to buffer', () => {
+  describe("append", () => {
+    it("should append logs to buffer", () => {
       const log: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log);
@@ -29,15 +29,15 @@ describe('LogRingBufferAdapter', () => {
       expect(stats.size).toBe(1);
     });
 
-    it('should evict oldest log when buffer is full', () => {
+    it("should evict oldest log when buffer is full", () => {
       // Add 6 logs to a buffer with maxSize 5
       for (let i = 0; i < 6; i++) {
         buffer.append({
           timestamp: Date.now() + i,
-          level: 'info',
+          level: "info",
           message: `Log ${i}`,
           fields: {},
-          source: 'test',
+          source: "test",
         });
       }
 
@@ -46,20 +46,20 @@ describe('LogRingBufferAdapter', () => {
       expect(stats.evictions).toBe(1); // 1 log evicted
 
       const logs = buffer.query();
-      expect(logs[logs.length - 1].message).toBe('Log 1'); // Log 0 was evicted
-      expect(logs[0].message).toBe('Log 5'); // Newest first
+      expect(logs[logs.length - 1].message).toBe("Log 1"); // Log 0 was evicted
+      expect(logs[0].message).toBe("Log 5"); // Newest first
     });
 
-    it('should notify subscribers when log is appended', () => {
+    it("should notify subscribers when log is appended", () => {
       const callback = vi.fn();
       const unsubscribe = buffer.subscribe(callback);
 
       const log: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log);
@@ -70,9 +70,9 @@ describe('LogRingBufferAdapter', () => {
       unsubscribe();
     });
 
-    it('should handle subscriber errors gracefully', () => {
+    it("should handle subscriber errors gracefully", () => {
       const errorCallback = vi.fn(() => {
-        throw new Error('Subscriber error');
+        throw new Error("Subscriber error");
       });
       const goodCallback = vi.fn();
 
@@ -81,10 +81,10 @@ describe('LogRingBufferAdapter', () => {
 
       const log: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       // Should not throw
@@ -95,89 +95,89 @@ describe('LogRingBufferAdapter', () => {
     });
   });
 
-  describe('query', () => {
+  describe("query", () => {
     const now = Date.now();
 
     beforeEach(() => {
       // Add test logs (use current time to avoid TTL eviction)
       buffer.append({
         timestamp: now - 4000,
-        level: 'debug',
-        message: 'Debug log',
+        level: "debug",
+        message: "Debug log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
       buffer.append({
         timestamp: now - 3000,
-        level: 'info',
-        message: 'Info log',
+        level: "info",
+        message: "Info log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
       buffer.append({
         timestamp: now - 2000,
-        level: 'warn',
-        message: 'Warn log',
+        level: "warn",
+        message: "Warn log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
       buffer.append({
         timestamp: now - 1000,
-        level: 'error',
-        message: 'Error log',
+        level: "error",
+        message: "Error log",
         fields: {},
-        source: 'api',
+        source: "api",
       });
     });
 
-    it('should return all logs without filters', () => {
+    it("should return all logs without filters", () => {
       const logs = buffer.query();
       expect(logs).toHaveLength(4);
       expect(logs[0].timestamp).toBe(now - 1000); // Newest first
       expect(logs[3].timestamp).toBe(now - 4000); // Oldest last
     });
 
-    it('should filter by level', () => {
-      const logs = buffer.query({ level: 'error' });
+    it("should filter by level", () => {
+      const logs = buffer.query({ level: "error" });
       expect(logs).toHaveLength(1);
-      expect(logs[0].level).toBe('error');
+      expect(logs[0].level).toBe("error");
     });
 
-    it('should filter by source', () => {
-      const logs = buffer.query({ source: 'api' });
+    it("should filter by source", () => {
+      const logs = buffer.query({ source: "api" });
       expect(logs).toHaveLength(1);
-      expect(logs[0].source).toBe('api');
+      expect(logs[0].source).toBe("api");
     });
 
-    it('should filter by timestamp range', () => {
+    it("should filter by timestamp range", () => {
       const logs = buffer.query({ from: now - 3000, to: now - 2000 });
       expect(logs).toHaveLength(2);
       expect(logs[0].timestamp).toBe(now - 2000);
       expect(logs[1].timestamp).toBe(now - 3000);
     });
 
-    it('should apply limit', () => {
+    it("should apply limit", () => {
       const logs = buffer.query({ limit: 2 });
       expect(logs).toHaveLength(2);
       expect(logs[0].timestamp).toBe(now - 1000); // Newest
       expect(logs[1].timestamp).toBe(now - 2000);
     });
 
-    it('should combine multiple filters', () => {
+    it("should combine multiple filters", () => {
       const logs = buffer.query({
-        level: 'info',
-        source: 'test',
+        level: "info",
+        source: "test",
         from: now - 3500,
       });
       expect(logs).toHaveLength(1);
-      expect(logs[0].level).toBe('info');
-      expect(logs[0].source).toBe('test');
+      expect(logs[0].level).toBe("info");
+      expect(logs[0].source).toBe("test");
       expect(logs[0].timestamp).toBeGreaterThanOrEqual(now - 3500);
     });
   });
 
-  describe('subscribe', () => {
-    it('should allow multiple subscribers', () => {
+  describe("subscribe", () => {
+    it("should allow multiple subscribers", () => {
       const callback1 = vi.fn();
       const callback2 = vi.fn();
 
@@ -186,10 +186,10 @@ describe('LogRingBufferAdapter', () => {
 
       const log: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log);
@@ -198,16 +198,16 @@ describe('LogRingBufferAdapter', () => {
       expect(callback2).toHaveBeenCalledTimes(1);
     });
 
-    it('should unsubscribe correctly', () => {
+    it("should unsubscribe correctly", () => {
       const callback = vi.fn();
       const unsubscribe = buffer.subscribe(callback);
 
       const log: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log 1',
+        level: "info",
+        message: "Test log 1",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log);
@@ -218,10 +218,10 @@ describe('LogRingBufferAdapter', () => {
 
       const log2: LogRecord = {
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log 2',
+        level: "info",
+        message: "Test log 2",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log2);
@@ -229,22 +229,22 @@ describe('LogRingBufferAdapter', () => {
     });
   });
 
-  describe('getStats', () => {
-    it('should return correct stats', () => {
+  describe("getStats", () => {
+    it("should return correct stats", () => {
       const now = Date.now();
       const log1: LogRecord = {
         timestamp: now - 1000,
-        level: 'info',
-        message: 'Log 1',
+        level: "info",
+        message: "Log 1",
         fields: {},
-        source: 'test',
+        source: "test",
       };
       const log2: LogRecord = {
         timestamp: now,
-        level: 'info',
-        message: 'Log 2',
+        level: "info",
+        message: "Log 2",
         fields: {},
-        source: 'test',
+        source: "test",
       };
 
       buffer.append(log1);
@@ -258,7 +258,7 @@ describe('LogRingBufferAdapter', () => {
       expect(stats.evictions).toBe(0);
     });
 
-    it('should return zeros for empty buffer', () => {
+    it("should return zeros for empty buffer", () => {
       const stats = buffer.getStats();
       expect(stats.size).toBe(0);
       expect(stats.maxSize).toBe(5);
@@ -268,14 +268,14 @@ describe('LogRingBufferAdapter', () => {
     });
   });
 
-  describe('clear', () => {
-    it('should clear all logs', () => {
+  describe("clear", () => {
+    it("should clear all logs", () => {
       buffer.append({
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       expect(buffer.getStats().size).toBe(1);
@@ -288,39 +288,42 @@ describe('LogRingBufferAdapter', () => {
     });
   });
 
-  describe('TTL eviction', () => {
-    it('should evict expired logs based on TTL', async () => {
-      const shortTtlBuffer = new LogRingBufferAdapter({ maxSize: 10, ttl: 100 }); // 100ms TTL
+  describe("TTL eviction", () => {
+    it("should evict expired logs based on TTL", async () => {
+      const shortTtlBuffer = new LogRingBufferAdapter({
+        maxSize: 10,
+        ttl: 100,
+      }); // 100ms TTL
 
       // Add old log
       shortTtlBuffer.append({
         timestamp: Date.now() - 200, // Expired
-        level: 'info',
-        message: 'Old log',
+        level: "info",
+        message: "Old log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       // Add new log
       shortTtlBuffer.append({
         timestamp: Date.now(),
-        level: 'info',
-        message: 'New log',
+        level: "info",
+        message: "New log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       // Query should trigger eviction
       const logs = shortTtlBuffer.query();
       expect(logs).toHaveLength(1);
-      expect(logs[0].message).toBe('New log');
+      expect(logs[0].message).toBe("New log");
 
       const stats = shortTtlBuffer.getStats();
       expect(stats.size).toBe(1);
       expect(stats.evictions).toBe(1); // Old log evicted
     });
 
-    it('should evict multiple expired logs', () => {
+    it("should evict multiple expired logs", () => {
       const now = Date.now();
       const ttl = 1000;
       const shortTtlBuffer = new LogRingBufferAdapter({ maxSize: 10, ttl });
@@ -329,10 +332,10 @@ describe('LogRingBufferAdapter', () => {
       for (let i = 0; i < 3; i++) {
         shortTtlBuffer.append({
           timestamp: now - ttl - 100, // Expired
-          level: 'info',
+          level: "info",
           message: `Old log ${i}`,
           fields: {},
-          source: 'test',
+          source: "test",
         });
       }
 
@@ -340,49 +343,49 @@ describe('LogRingBufferAdapter', () => {
       for (let i = 0; i < 2; i++) {
         shortTtlBuffer.append({
           timestamp: now,
-          level: 'info',
+          level: "info",
           message: `New log ${i}`,
           fields: {},
-          source: 'test',
+          source: "test",
         });
       }
 
       const logs = shortTtlBuffer.query();
       expect(logs).toHaveLength(2);
-      expect(logs.every((l) => l.message.startsWith('New log'))).toBe(true);
+      expect(logs.every((l) => l.message.startsWith("New log"))).toBe(true);
 
       const stats = shortTtlBuffer.getStats();
       expect(stats.evictions).toBe(3);
     });
   });
 
-  describe('edge cases', () => {
-    it('should handle zero maxSize', () => {
+  describe("edge cases", () => {
+    it("should handle zero maxSize", () => {
       const zeroBuffer = new LogRingBufferAdapter({ maxSize: 0 });
 
       zeroBuffer.append({
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Test log',
+        level: "info",
+        message: "Test log",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       const stats = zeroBuffer.getStats();
       expect(stats.size).toBe(0); // Nothing stored
     });
 
-    it('should handle negative timestamps', () => {
+    it("should handle negative timestamps", () => {
       const now = Date.now();
       // Use timestamp that won't be evicted by TTL (recent past)
       const negativeTimestamp = now - 1000;
 
       buffer.append({
         timestamp: negativeTimestamp,
-        level: 'info',
-        message: 'Timestamp test',
+        level: "info",
+        message: "Timestamp test",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       const logs = buffer.query();
@@ -390,32 +393,32 @@ describe('LogRingBufferAdapter', () => {
       expect(logs[0].timestamp).toBe(negativeTimestamp);
     });
 
-    it('should handle empty fields', () => {
+    it("should handle empty fields", () => {
       buffer.append({
         timestamp: Date.now(),
-        level: 'info',
-        message: 'No fields',
+        level: "info",
+        message: "No fields",
         fields: {},
-        source: 'test',
+        source: "test",
       });
 
       const logs = buffer.query();
       expect(logs[0].fields).toEqual({});
     });
 
-    it('should handle complex fields', () => {
+    it("should handle complex fields", () => {
       const complexFields = {
-        user: { id: 123, name: 'Alice' },
-        tags: ['api', 'error'],
+        user: { id: 123, name: "Alice" },
+        tags: ["api", "error"],
         count: 42,
       };
 
       buffer.append({
         timestamp: Date.now(),
-        level: 'info',
-        message: 'Complex fields',
+        level: "info",
+        message: "Complex fields",
         fields: complexFields,
-        source: 'test',
+        source: "test",
       });
 
       const logs = buffer.query();

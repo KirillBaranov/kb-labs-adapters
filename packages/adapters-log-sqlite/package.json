@@ -23,7 +23,9 @@
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint . --fix"
   },
   "peerDependencies": {
     "@kb-labs/core-platform": "*"
@@ -31,11 +33,17 @@
   "devDependencies": {
     "@kb-labs/adapters-sqlite": "link:../adapters-sqlite",
     "@kb-labs/core-platform": "link:../../../kb-labs-core/packages/core-platform",
-    "@types/node": "^22.0.0",
+    "@types/node": "^24.3.3",
+    "eslint": "^9",
     "rimraf": "^6.0.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.3",
-    "vitest": "^3.2.4"
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4",
+    "@kb-labs/devkit": "link:../../../kb-labs-devkit"
   },
-  "private": true
+  "private": true,
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
 }

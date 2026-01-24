@@ -1,6 +1,6 @@
-import fs from 'fs-extra';
-import { join } from 'node:path';
-import { format, parseISO } from 'date-fns';
+import fs from "fs-extra";
+import { join } from "node:path";
+import { format, parseISO } from "date-fns";
 import type {
   IAnalytics,
   ICache,
@@ -12,11 +12,11 @@ import type {
   BufferStatus,
   DlqStatus,
   AnalyticsEvent as PlatformAnalyticsEvent,
-} from '@kb-labs/core-platform/adapters';
+} from "@kb-labs/core-platform/adapters";
 
 // Re-export manifest
-export { manifest } from './manifest.js';
-import { randomUUID } from 'node:crypto';
+export { manifest } from "./manifest.js";
+import { randomUUID } from "node:crypto";
 
 export interface FileAnalyticsOptions {
   /**
@@ -44,7 +44,7 @@ export interface FileAnalyticsOptions {
  * Legacy stored event format (for backward compatibility)
  */
 interface StoredEventLegacy {
-  type: 'event' | 'metric';
+  type: "event" | "metric";
   timestamp: string;
   name: string;
   properties?: Record<string, unknown>;
@@ -57,26 +57,31 @@ class FileAnalytics implements IAnalytics {
   private context: AnalyticsContext; // Removed readonly to allow setSource()
   private cache?: ICache; // Optional cache for stats caching
 
-  constructor(options: FileAnalyticsOptions = {}, context?: AnalyticsContext, cache?: ICache) {
+  constructor(
+    options: FileAnalyticsOptions = {},
+    context?: AnalyticsContext,
+    cache?: ICache,
+  ) {
     // Get cwd from workspace context (injected by loader) or fallback
     const cwd = options.workspace?.cwd ?? process.cwd();
 
-    const defaultBaseDir = join(cwd, '.kb/analytics/buffer');
+    const defaultBaseDir = join(cwd, ".kb/analytics/buffer");
     const configuredBaseDir = options.baseDir ?? defaultBaseDir;
 
     // If baseDir is relative, resolve from cwd; otherwise use as-is
-    this.baseDir = configuredBaseDir.startsWith('/')
+    this.baseDir = configuredBaseDir.startsWith("/")
       ? configuredBaseDir
       : join(cwd, configuredBaseDir);
 
-    this.filenamePattern = options.filenamePattern ?? 'events-YYYYMMDD';
+    this.filenamePattern = options.filenamePattern ?? "events-YYYYMMDD";
 
     // Priority: options.analytics (injected) → legacy context param → fallback
-    this.context = options.analytics ?? context ?? {
-      source: { product: 'unknown', version: '0.0.0' },
-      runId: randomUUID(),
-      ctx: { workspace: cwd },
-    };
+    this.context = options.analytics ??
+      context ?? {
+        source: { product: "unknown", version: "0.0.0" },
+        runId: randomUUID(),
+        ctx: { workspace: cwd },
+      };
 
     // Store cache if provided
     this.cache = cache;
@@ -86,7 +91,7 @@ class FileAnalytics implements IAnalytics {
     // Create V1 event with automatic context enrichment
     const v1Event: PlatformAnalyticsEvent = {
       id: randomUUID(),
-      schema: 'kb.v1',
+      schema: "kb.v1",
       type: event,
       ts: new Date().toISOString(),
       ingestTs: new Date().toISOString(),
@@ -99,11 +104,15 @@ class FileAnalytics implements IAnalytics {
     await this.writeV1(v1Event);
   }
 
-  async metric(name: string, value: number, tags?: Record<string, string>): Promise<void> {
+  async metric(
+    name: string,
+    value: number,
+    tags?: Record<string, string>,
+  ): Promise<void> {
     // Metrics are tracked as events with value in payload
     const v1Event: PlatformAnalyticsEvent = {
       id: randomUUID(),
-      schema: 'kb.v1',
+      schema: "kb.v1",
       type: name,
       ts: new Date().toISOString(),
       ingestTs: new Date().toISOString(),
@@ -116,17 +125,20 @@ class FileAnalytics implements IAnalytics {
     await this.writeV1(v1Event);
   }
 
-  async identify(userId: string, traits?: Record<string, unknown>): Promise<void> {
+  async identify(
+    userId: string,
+    traits?: Record<string, unknown>,
+  ): Promise<void> {
     const v1Event: PlatformAnalyticsEvent = {
       id: randomUUID(),
-      schema: 'kb.v1',
-      type: 'user.identify',
+      schema: "kb.v1",
+      type: "user.identify",
       ts: new Date().toISOString(),
       ingestTs: new Date().toISOString(),
       source: this.context.source,
       runId: this.context.runId,
       actor: {
-        type: 'user',
+        type: "user",
         id: userId,
         name: (traits?.name as string) || undefined,
       },
@@ -201,7 +213,9 @@ class FileAnalytics implements IAnalytics {
     }
 
     // Sort by timestamp descending (newest first)
-    filtered.sort((a, b) => parseISO(b.ts).getTime() - parseISO(a.ts).getTime());
+    filtered.sort(
+      (a, b) => parseISO(b.ts).getTime() - parseISO(a.ts).getTime(),
+    );
 
     // Apply pagination
     const limit = query?.limit ?? 100;
@@ -217,7 +231,7 @@ class FileAnalytics implements IAnalytics {
 
   async getStats(): Promise<EventsStats> {
     // Cache key for stats
-    const cacheKey = 'analytics:file:stats';
+    const cacheKey = "analytics:file:stats";
 
     // Try to get from cache first (if cache adapter was provided)
     if (this.cache) {
@@ -241,7 +255,8 @@ class FileAnalytics implements IAnalytics {
     for (const event of allEvents) {
       byType[event.type] = (byType[event.type] || 0) + 1;
       if (event.source?.product) {
-        bySource[event.source.product] = (bySource[event.source.product] || 0) + 1;
+        bySource[event.source.product] =
+          (bySource[event.source.product] || 0) + 1;
       }
       if (event.actor) {
         byActor[event.actor.type] = (byActor[event.actor.type] || 0) + 1;
@@ -258,8 +273,12 @@ class FileAnalytics implements IAnalytics {
 
       for (const event of allEvents) {
         const ts = parseISO(event.ts).getTime();
-        if (ts < oldestTs) oldestTs = ts;
-        if (ts > newestTs) newestTs = ts;
+        if (ts < oldestTs) {
+          oldestTs = ts;
+        }
+        if (ts > newestTs) {
+          newestTs = ts;
+        }
       }
     }
 
@@ -294,7 +313,7 @@ class FileAnalytics implements IAnalytics {
     const eventsByDate = new Map<string, PlatformAnalyticsEvent[]>();
 
     for (const event of events) {
-      const date = format(parseISO(event.ts), 'yyyy-MM-dd');
+      const date = format(parseISO(event.ts), "yyyy-MM-dd");
       if (!eventsByDate.has(date)) {
         eventsByDate.set(date, []);
       }
@@ -309,9 +328,9 @@ class FileAnalytics implements IAnalytics {
 
       // Calculate common metrics based on event type
       const firstEvent = dayEvents[0];
-      const eventType = firstEvent?.type || '';
+      const eventType = firstEvent?.type || "";
 
-      if (eventType.startsWith('llm.')) {
+      if (eventType.startsWith("llm.")) {
         // LLM metrics: totalTokens, totalCost, avgDurationMs
         let totalTokens = 0;
         let totalCost = 0;
@@ -326,8 +345,9 @@ class FileAnalytics implements IAnalytics {
 
         metrics.totalTokens = totalTokens;
         metrics.totalCost = totalCost;
-        metrics.avgDurationMs = dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith('embeddings.')) {
+        metrics.avgDurationMs =
+          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
+      } else if (eventType.startsWith("embeddings.")) {
         // Embeddings metrics: totalTokens, totalCost, avgDurationMs
         let totalTokens = 0;
         let totalCost = 0;
@@ -342,8 +362,9 @@ class FileAnalytics implements IAnalytics {
 
         metrics.totalTokens = totalTokens;
         metrics.totalCost = totalCost;
-        metrics.avgDurationMs = dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith('vectorstore.')) {
+        metrics.avgDurationMs =
+          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
+      } else if (eventType.startsWith("vectorstore.")) {
         // VectorStore metrics: operation counts, avgDurationMs
         let totalSearches = 0;
         let totalUpserts = 0;
@@ -352,26 +373,39 @@ class FileAnalytics implements IAnalytics {
 
         for (const event of dayEvents) {
           const payload = event.payload as any;
-          if (event.type.includes('search')) totalSearches++;
-          if (event.type.includes('upsert')) totalUpserts++;
-          if (event.type.includes('delete')) totalDeletes++;
+          if (event.type.includes("search")) {
+            totalSearches++;
+          }
+          if (event.type.includes("upsert")) {
+            totalUpserts++;
+          }
+          if (event.type.includes("delete")) {
+            totalDeletes++;
+          }
           totalDuration += payload?.durationMs || 0;
         }
 
         metrics.totalSearches = totalSearches;
         metrics.totalUpserts = totalUpserts;
         metrics.totalDeletes = totalDeletes;
-        metrics.avgDurationMs = dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith('cache.')) {
+        metrics.avgDurationMs =
+          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
+      } else if (eventType.startsWith("cache.")) {
         // Cache metrics: hits, misses, sets, hitRate
         let totalHits = 0;
         let totalMisses = 0;
         let totalSets = 0;
 
         for (const event of dayEvents) {
-          if (event.type === 'cache.hit') totalHits++;
-          if (event.type === 'cache.miss') totalMisses++;
-          if (event.type === 'cache.set') totalSets++;
+          if (event.type === "cache.hit") {
+            totalHits++;
+          }
+          if (event.type === "cache.miss") {
+            totalMisses++;
+          }
+          if (event.type === "cache.set") {
+            totalSets++;
+          }
         }
 
         const totalGets = totalHits + totalMisses;
@@ -379,7 +413,7 @@ class FileAnalytics implements IAnalytics {
         metrics.totalMisses = totalMisses;
         metrics.totalSets = totalSets;
         metrics.hitRate = totalGets > 0 ? (totalHits / totalGets) * 100 : 0;
-      } else if (eventType.startsWith('storage.')) {
+      } else if (eventType.startsWith("storage.")) {
         // Storage metrics: bytesRead, bytesWritten, avgDurationMs
         let totalBytesRead = 0;
         let totalBytesWritten = 0;
@@ -394,7 +428,8 @@ class FileAnalytics implements IAnalytics {
 
         metrics.totalBytesRead = totalBytesRead;
         metrics.totalBytesWritten = totalBytesWritten;
-        metrics.avgDurationMs = dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
+        metrics.avgDurationMs =
+          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
       }
 
       dailyStats.push({
@@ -416,7 +451,7 @@ class FileAnalytics implements IAnalytics {
     try {
       await fs.ensureDir(this.baseDir);
       const files = await fs.readdir(this.baseDir);
-      const jsonlFiles = files.filter((f) => f.endsWith('.jsonl'));
+      const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
 
       if (jsonlFiles.length === 0) {
         return null;
@@ -431,8 +466,11 @@ class FileAnalytics implements IAnalytics {
         totalSize += stats.size;
 
         // Read first and last line to get timestamps
-        const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter((l) => l.length > 0);
+        const content = await fs.readFile(filePath, "utf-8");
+        const lines = content
+          .trim()
+          .split("\n")
+          .filter((l) => l.length > 0);
 
         for (const line of lines) {
           try {
@@ -451,10 +489,16 @@ class FileAnalytics implements IAnalytics {
       return {
         segments: jsonlFiles.length,
         totalSizeBytes: totalSize,
-        oldestEventTs: timestamps.length > 0 ? new Date(Math.min(...timestamps)).toISOString() : null,
-        newestEventTs: timestamps.length > 0 ? new Date(Math.max(...timestamps)).toISOString() : null,
+        oldestEventTs:
+          timestamps.length > 0
+            ? new Date(Math.min(...timestamps)).toISOString()
+            : null,
+        newestEventTs:
+          timestamps.length > 0
+            ? new Date(Math.max(...timestamps)).toISOString()
+            : null,
       };
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }
@@ -472,11 +516,14 @@ class FileAnalytics implements IAnalytics {
    * Write V1 event directly to file (new format)
    */
   private async writeV1(event: PlatformAnalyticsEvent): Promise<void> {
-    const dateStr = format(new Date(), 'yyyyMMdd');
-    const filename = this.filenamePattern.replace('YYYYMMDD', dateStr) + '.jsonl';
+    const dateStr = format(new Date(), "yyyyMMdd");
+    const filename =
+      this.filenamePattern.replace("YYYYMMDD", dateStr) + ".jsonl";
     const fullPath = join(this.baseDir, filename);
     await fs.ensureDir(this.baseDir);
-    await fs.appendFile(fullPath, JSON.stringify(event) + '\n', { encoding: 'utf8' });
+    await fs.appendFile(fullPath, JSON.stringify(event) + "\n", {
+      encoding: "utf8",
+    });
   }
 
   /**
@@ -487,21 +534,24 @@ class FileAnalytics implements IAnalytics {
     try {
       await fs.ensureDir(this.baseDir);
       const files = await fs.readdir(this.baseDir);
-      const jsonlFiles = files.filter((f) => f.endsWith('.jsonl'));
+      const jsonlFiles = files.filter((f) => f.endsWith(".jsonl"));
 
       const events: PlatformAnalyticsEvent[] = [];
 
       for (const file of jsonlFiles) {
         const filePath = join(this.baseDir, file);
-        const content = await fs.readFile(filePath, 'utf-8');
-        const lines = content.trim().split('\n').filter((l) => l.length > 0);
+        const content = await fs.readFile(filePath, "utf-8");
+        const lines = content
+          .trim()
+          .split("\n")
+          .filter((l) => l.length > 0);
 
         for (const line of lines) {
           try {
             const parsed = JSON.parse(line);
 
             // Check if it's already V1 format
-            if (parsed.schema === 'kb.v1') {
+            if (parsed.schema === "kb.v1") {
               events.push(parsed as PlatformAnalyticsEvent);
             } else {
               // Legacy format - convert to V1
@@ -518,7 +568,7 @@ class FileAnalytics implements IAnalytics {
 
       return events;
     } catch (error) {
-      console.warn('Failed to read events:', error);
+      console.warn("Failed to read events:", error);
       return [];
     }
   }
@@ -527,15 +577,22 @@ class FileAnalytics implements IAnalytics {
    * Map legacy stored event format to platform AnalyticsEvent format (kb.v1 schema)
    * Used for backward compatibility with old events.
    */
-  private mapLegacyToPlatformEvent(stored: StoredEventLegacy): PlatformAnalyticsEvent {
+  private mapLegacyToPlatformEvent(
+    stored: StoredEventLegacy,
+  ): PlatformAnalyticsEvent {
     // Extract actor info from properties if available
     const userId = stored.properties?.userId as string | undefined;
-    const actorType = stored.properties?.actorType as 'user' | 'agent' | 'ci' | undefined;
+    const actorType = stored.properties?.actorType as
+      | "user"
+      | "agent"
+      | "ci"
+      | undefined;
     const actorName = stored.properties?.actorName as string | undefined;
 
     // Extract source info from properties if available
-    const sourceProduct = (stored.properties?.source as string) || 'file-analytics';
-    const sourceVersion = (stored.properties?.version as string) || '0.1.0';
+    const sourceProduct =
+      (stored.properties?.source as string) || "file-analytics";
+    const sourceVersion = (stored.properties?.version as string) || "0.1.0";
 
     // Extract runId from properties if available
     const runId = (stored.properties?.runId as string) || randomUUID();
@@ -544,7 +601,7 @@ class FileAnalytics implements IAnalytics {
     const actor =
       userId || actorType
         ? {
-            type: actorType || 'user',
+            type: actorType || "user",
             id: userId,
             name: actorName,
           }
@@ -556,16 +613,23 @@ class FileAnalytics implements IAnalytics {
       for (const [key, value] of Object.entries(stored.properties)) {
         // Skip internal fields
         if (
-          ['userId', 'actorType', 'actorName', 'source', 'version', 'runId'].includes(key)
+          [
+            "userId",
+            "actorType",
+            "actorName",
+            "source",
+            "version",
+            "runId",
+          ].includes(key)
         ) {
           continue;
         }
 
         // Only include primitive values in ctx
         if (
-          typeof value === 'string' ||
-          typeof value === 'number' ||
-          typeof value === 'boolean' ||
+          typeof value === "string" ||
+          typeof value === "number" ||
+          typeof value === "boolean" ||
           value === null
         ) {
           ctx[key] = value;
@@ -575,7 +639,7 @@ class FileAnalytics implements IAnalytics {
 
     return {
       id: randomUUID(),
-      schema: 'kb.v1' as const,
+      schema: "kb.v1" as const,
       type: stored.name,
       ts: stored.timestamp,
       ingestTs: stored.timestamp,
@@ -586,14 +650,17 @@ class FileAnalytics implements IAnalytics {
       runId,
       actor,
       ctx: Object.keys(ctx).length > 0 ? ctx : undefined,
-      payload: stored.type === 'metric' && stored.value !== undefined ? { value: stored.value } : stored.properties,
+      payload:
+        stored.type === "metric" && stored.value !== undefined
+          ? { value: stored.value }
+          : stored.properties,
     };
   }
 }
 
 export function createAdapter(
   options?: FileAnalyticsOptions,
-  deps?: Record<string, unknown>
+  deps?: Record<string, unknown>,
 ): IAnalytics {
   // Extract cache from deps if provided (optional dependency)
   const cache = deps?.cache as ICache | undefined;

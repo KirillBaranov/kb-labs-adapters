@@ -25,7 +25,7 @@
  * ```
  */
 
-import type { AdapterCall, AdapterResponse } from './types.js';
+import type { AdapterCall, AdapterResponse } from "./types.js";
 
 /**
  * Transport configuration options.
@@ -129,7 +129,7 @@ export class TransportError extends Error {
 
   constructor(message: string, cause?: Error) {
     super(message);
-    this.name = 'TransportError';
+    this.name = "TransportError";
     this.cause = cause;
     if (cause) {
       this.stack = `${this.stack}\nCaused by: ${cause.stack}`;
@@ -145,7 +145,7 @@ export class TimeoutError extends TransportError {
 
   constructor(message: string, timeoutMs: number) {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
     this.timeoutMs = timeoutMs;
   }
 }
@@ -156,7 +156,7 @@ export class TimeoutError extends TransportError {
 export class CircuitOpenError extends TransportError {
   constructor(message: string) {
     super(message);
-    this.name = 'CircuitOpenError';
+    this.name = "CircuitOpenError";
   }
 }
 
@@ -192,11 +192,11 @@ export function isRetryableError(error: Error): boolean {
   const code = (error as any).code;
   if (code) {
     const retryableCodes = [
-      'ECONNRESET',   // Connection reset
-      'ECONNREFUSED', // Connection refused
-      'ETIMEDOUT',    // Operation timed out
-      'ENOTFOUND',    // DNS lookup failed
-      'EAI_AGAIN',    // DNS temporary failure
+      "ECONNRESET", // Connection reset
+      "ECONNREFUSED", // Connection refused
+      "ETIMEDOUT", // Operation timed out
+      "ENOTFOUND", // DNS lookup failed
+      "EAI_AGAIN", // DNS temporary failure
     ];
     return retryableCodes.includes(code);
   }

@@ -29,7 +29,11 @@
  * ```
  */
 
-import type { ISQLDatabase, SQLQueryResult, SQLTransaction } from '@kb-labs/core-platform/adapters';
+import type {
+  ISQLDatabase,
+  SQLQueryResult,
+  SQLTransaction,
+} from "@kb-labs/core-platform/adapters";
 
 /**
  * Permission configuration for SQL database access.
@@ -70,10 +74,12 @@ export class SQLPermissionError extends Error {
   constructor(
     public readonly operation: string,
     public readonly tables: string[],
-    public readonly reason: string
+    public readonly reason: string,
   ) {
-    super(`SQL access denied: ${operation} on tables [${tables.join(', ')}] - ${reason}`);
-    this.name = 'SQLPermissionError';
+    super(
+      `SQL access denied: ${operation} on tables [${tables.join(", ")}] - ${reason}`,
+    );
+    this.name = "SQLPermissionError";
   }
 }
 
@@ -94,7 +100,7 @@ export class SQLPermissionError extends Error {
 export class SecureSQLAdapter implements ISQLDatabase {
   constructor(
     private readonly baseDb: ISQLDatabase,
-    private readonly permissions: SQLPermissions
+    private readonly permissions: SQLPermissions,
   ) {}
 
   /**
@@ -105,7 +111,7 @@ export class SecureSQLAdapter implements ISQLDatabase {
     const tables = new Set<string>();
 
     // Normalize SQL: uppercase, remove extra spaces
-    const normalized = sql.toUpperCase().replace(/\s+/g, ' ').trim();
+    const normalized = sql.toUpperCase().replace(/\s+/g, " ").trim();
 
     // Pattern: FROM/JOIN/INTO/UPDATE <table_name>
     const patterns = [
@@ -131,29 +137,29 @@ export class SecureSQLAdapter implements ISQLDatabase {
   /**
    * Detect SQL operation type.
    */
-  private detectOperation(sql: string): 'read' | 'write' | 'schema' {
+  private detectOperation(sql: string): "read" | "write" | "schema" {
     const normalized = sql.trim().toUpperCase();
 
     // Schema operations
     if (
-      normalized.startsWith('CREATE ') ||
-      normalized.startsWith('ALTER ') ||
-      normalized.startsWith('DROP ')
+      normalized.startsWith("CREATE ") ||
+      normalized.startsWith("ALTER ") ||
+      normalized.startsWith("DROP ")
     ) {
-      return 'schema';
+      return "schema";
     }
 
     // Write operations
     if (
-      normalized.startsWith('INSERT ') ||
-      normalized.startsWith('UPDATE ') ||
-      normalized.startsWith('DELETE ')
+      normalized.startsWith("INSERT ") ||
+      normalized.startsWith("UPDATE ") ||
+      normalized.startsWith("DELETE ")
     ) {
-      return 'write';
+      return "write";
     }
 
     // Read operations (SELECT, PRAGMA, etc.)
-    return 'read';
+    return "read";
   }
 
   /**
@@ -168,7 +174,7 @@ export class SecureSQLAdapter implements ISQLDatabase {
       throw new SQLPermissionError(
         operation,
         [],
-        `${operation} operations are disabled`
+        `${operation} operations are disabled`,
       );
     }
 
@@ -182,7 +188,7 @@ export class SecureSQLAdapter implements ISQLDatabase {
           throw new SQLPermissionError(
             operation,
             tables,
-            `table '${table}' is in denylist`
+            `table '${table}' is in denylist`,
           );
         }
       }
@@ -195,7 +201,7 @@ export class SecureSQLAdapter implements ISQLDatabase {
           throw new SQLPermissionError(
             operation,
             tables,
-            `table '${table}' not in allowlist: [${this.permissions.allowlist.join(', ')}]`
+            `table '${table}' not in allowlist: [${this.permissions.allowlist.join(", ")}]`,
           );
         }
       }
@@ -205,7 +211,10 @@ export class SecureSQLAdapter implements ISQLDatabase {
   /**
    * Execute a SQL query with permission checks.
    */
-  async query<T = unknown>(sql: string, params?: unknown[]): Promise<SQLQueryResult<T>> {
+  async query<T = unknown>(
+    sql: string,
+    params?: unknown[],
+  ): Promise<SQLQueryResult<T>> {
     this.checkPermissions(sql);
     return this.baseDb.query<T>(sql, params);
   }
@@ -219,7 +228,10 @@ export class SecureSQLAdapter implements ISQLDatabase {
 
     // Wrap transaction object to intercept queries
     return {
-      query: async <T = unknown>(sql: string, params?: unknown[]): Promise<SQLQueryResult<T>> => {
+      query: async <T = unknown>(
+        sql: string,
+        params?: unknown[],
+      ): Promise<SQLQueryResult<T>> => {
         this.checkPermissions(sql);
         return baseTrx.query<T>(sql, params);
       },
@@ -260,7 +272,7 @@ export class SecureSQLAdapter implements ISQLDatabase {
  */
 export function createSecureSQL(
   baseDb: ISQLDatabase,
-  permissions: SQLPermissions
+  permissions: SQLPermissions,
 ): SecureSQLAdapter {
   return new SecureSQLAdapter(baseDb, permissions);
 }

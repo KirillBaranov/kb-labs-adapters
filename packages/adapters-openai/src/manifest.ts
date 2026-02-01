@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "OpenAI LLM",
   version: "1.0.0",
   description: "OpenAI language model adapter (GPT-4, GPT-3.5, etc.)",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "ILLM",
   capabilities: {

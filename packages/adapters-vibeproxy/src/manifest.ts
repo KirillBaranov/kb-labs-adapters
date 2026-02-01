@@ -15,8 +15,8 @@ export const manifest: AdapterManifest = {
   version: "0.1.0",
   description:
     "VibeProxy local adapter supporting multiple LLM providers (Claude, GPT, etc.)",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "ILLM",
   capabilities: {

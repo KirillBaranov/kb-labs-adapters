@@ -215,10 +215,10 @@ describe("FilesystemStorageAdapter", () => {
       const files = await storage.listWithMetadata("docs/");
 
       expect(files).toHaveLength(2);
-      expect(files[0].path).toBeDefined();
-      expect(files[0].size).toBeGreaterThan(0);
-      expect(files[0].lastModified).toBeDefined();
-      expect(files[0].contentType).toBeDefined();
+      expect(files[0]!.path).toBeDefined();
+      expect(files[0]!.size).toBeGreaterThan(0);
+      expect(files[0]!.lastModified).toBeDefined();
+      expect(files[0]!.contentType).toBeDefined();
     });
 
     it("should return empty array when no files match", async () => {

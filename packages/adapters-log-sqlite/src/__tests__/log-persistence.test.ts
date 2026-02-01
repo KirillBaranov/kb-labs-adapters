@@ -35,6 +35,7 @@ describe("LogSQLitePersistence", () => {
   describe("write", () => {
     it("should write log to database", async () => {
       const log: LogRecord = {
+        id: "test-1",
         timestamp: Date.now(),
         level: "info",
         message: "Test log",
@@ -51,13 +52,14 @@ describe("LogSQLitePersistence", () => {
 
       const result = await persistence.query({});
       expect(result.logs).toHaveLength(1);
-      expect(result.logs[0].message).toBe("Test log");
+      expect(result.logs[0]!.message).toBe("Test log");
     });
 
     it("should flush when batch size is reached", async () => {
       // Write 5 logs (batch size)
       for (let i = 0; i < 5; i++) {
         await persistence.write({
+          id: `test-batch-${i}`,
           timestamp: Date.now() + i,
           level: "info",
           message: `Log ${i}`,
@@ -80,6 +82,7 @@ describe("LogSQLitePersistence", () => {
       };
 
       await persistence.write({
+        id: "test-2",
         timestamp: Date.now(),
         level: "error",
         message: "Complex log",
@@ -92,11 +95,12 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].fields).toEqual(complexFields);
+      expect(result.logs[0]!.fields).toEqual(complexFields);
     });
 
     it("should handle empty fields", async () => {
       await persistence.write({
+        id: "test-3",
         timestamp: Date.now(),
         level: "info",
         message: "No fields",
@@ -109,11 +113,12 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].fields).toEqual({});
+      expect(result.logs[0]!.fields).toEqual({});
     });
 
     it("should generate ID if not provided", async () => {
       await persistence.write({
+        id: "test-4",
         timestamp: Date.now(),
         level: "info",
         message: "No ID",
@@ -126,8 +131,8 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].id).toBeDefined();
-      expect(typeof result.logs[0].id).toBe("string");
+      expect(result.logs[0]!.id).toBeDefined();
+      expect(typeof result.logs[0]!.id).toBe("string");
     });
 
     it("should preserve custom ID", async () => {
@@ -147,13 +152,14 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].id).toBe(customId);
+      expect(result.logs[0]!.id).toBe(customId);
     });
   });
 
   describe("writeBatch", () => {
     it("should write multiple logs in batch", async () => {
       const logs: LogRecord[] = Array.from({ length: 10 }, (_, i) => ({
+        id: `test-batch-write-${i}`,
         timestamp: Date.now() + i,
         level: "info",
         message: `Batch log ${i}`,
@@ -185,6 +191,7 @@ describe("LogSQLitePersistence", () => {
       // Add test logs
       const logs: LogRecord[] = [
         {
+          id: "test-query-1",
           timestamp: 1000,
           level: "debug",
           message: "Debug log",
@@ -192,6 +199,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-query-2",
           timestamp: 2000,
           level: "info",
           message: "Info log",
@@ -199,6 +207,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-query-3",
           timestamp: 3000,
           level: "warn",
           message: "Warn log",
@@ -206,6 +215,7 @@ describe("LogSQLitePersistence", () => {
           source: "api",
         },
         {
+          id: "test-query-4",
           timestamp: 4000,
           level: "error",
           message: "Error log",
@@ -213,6 +223,7 @@ describe("LogSQLitePersistence", () => {
           source: "api",
         },
         {
+          id: "test-query-5",
           timestamp: 5000,
           level: "fatal",
           message: "Fatal log",
@@ -232,13 +243,13 @@ describe("LogSQLitePersistence", () => {
       expect(result.logs).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.hasMore).toBe(false);
-      expect(result.logs[0].timestamp).toBe(5000); // Newest first (DESC)
+      expect(result.logs[0]!.timestamp).toBe(5000); // Newest first (DESC)
     });
 
     it("should filter by level", async () => {
       const result = await persistence.query({ level: "error" });
       expect(result.logs).toHaveLength(1);
-      expect(result.logs[0].level).toBe("error");
+      expect(result.logs[0]!.level).toBe("error");
     });
 
     it("should filter by source", async () => {
@@ -250,8 +261,8 @@ describe("LogSQLitePersistence", () => {
     it("should filter by timestamp range", async () => {
       const result = await persistence.query({ from: 2000, to: 4000 });
       expect(result.logs).toHaveLength(3);
-      expect(result.logs[0].timestamp).toBe(4000);
-      expect(result.logs[2].timestamp).toBe(2000);
+      expect(result.logs[0]!.timestamp).toBe(4000);
+      expect(result.logs[2]!.timestamp).toBe(2000);
     });
 
     it("should apply limit", async () => {
@@ -266,7 +277,7 @@ describe("LogSQLitePersistence", () => {
       expect(result.logs).toHaveLength(2);
       expect(result.total).toBe(5);
       expect(result.hasMore).toBe(true);
-      expect(result.logs[0].timestamp).toBe(3000); // 3rd log
+      expect(result.logs[0]!.timestamp).toBe(3000); // 3rd log
     });
 
     it("should sort by timestamp ascending", async () => {
@@ -274,8 +285,8 @@ describe("LogSQLitePersistence", () => {
         {},
         { sortBy: "timestamp", sortOrder: "asc" },
       );
-      expect(result.logs[0].timestamp).toBe(1000); // Oldest first
-      expect(result.logs[4].timestamp).toBe(5000); // Newest last
+      expect(result.logs[0]!.timestamp).toBe(1000); // Oldest first
+      expect(result.logs[4]!.timestamp).toBe(5000); // Newest last
     });
 
     it("should combine multiple filters", async () => {
@@ -284,9 +295,9 @@ describe("LogSQLitePersistence", () => {
         { limit: 10 },
       );
       expect(result.logs).toHaveLength(1);
-      expect(result.logs[0].level).toBe("error");
-      expect(result.logs[0].source).toBe("api");
-      expect(result.logs[0].timestamp).toBeGreaterThanOrEqual(3500);
+      expect(result.logs[0]!.level).toBe("error");
+      expect(result.logs[0]!.source).toBe("api");
+      expect(result.logs[0]!.timestamp).toBeGreaterThanOrEqual(3500);
     });
 
     it("should handle pagination correctly", async () => {
@@ -341,6 +352,7 @@ describe("LogSQLitePersistence", () => {
     beforeEach(async () => {
       const logs: LogRecord[] = [
         {
+          id: "test-search-1",
           timestamp: 1000,
           level: "info",
           message: "User authentication succeeded",
@@ -348,6 +360,7 @@ describe("LogSQLitePersistence", () => {
           source: "auth",
         },
         {
+          id: "test-search-2",
           timestamp: 2000,
           level: "error",
           message: "User authentication failed",
@@ -355,6 +368,7 @@ describe("LogSQLitePersistence", () => {
           source: "auth",
         },
         {
+          id: "test-search-3",
           timestamp: 3000,
           level: "info",
           message: "Database connection established",
@@ -362,6 +376,7 @@ describe("LogSQLitePersistence", () => {
           source: "db",
         },
         {
+          id: "test-search-4",
           timestamp: 4000,
           level: "error",
           message: "Database query timeout",
@@ -412,7 +427,7 @@ describe("LogSQLitePersistence", () => {
 
       expect(page1.logs).toHaveLength(1);
       expect(page2.logs).toHaveLength(1);
-      expect(page1.logs[0].id).not.toBe(page2.logs[0].id);
+      expect(page1.logs[0]!.id).not.toBe(page2.logs[0]!.id);
     });
   });
 
@@ -420,6 +435,7 @@ describe("LogSQLitePersistence", () => {
     beforeEach(async () => {
       const logs: LogRecord[] = [
         {
+          id: "test-old-1",
           timestamp: 1000,
           level: "info",
           message: "Old log 1",
@@ -427,6 +443,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-old-2",
           timestamp: 2000,
           level: "info",
           message: "Old log 2",
@@ -434,6 +451,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-new-1",
           timestamp: 5000,
           level: "info",
           message: "New log 1",
@@ -441,6 +459,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-new-2",
           timestamp: 6000,
           level: "info",
           message: "New log 2",
@@ -493,6 +512,7 @@ describe("LogSQLitePersistence", () => {
     it("should return correct stats", async () => {
       const logs: LogRecord[] = [
         {
+          id: "test-stats-1",
           timestamp: 1000,
           level: "info",
           message: "Log 1",
@@ -500,6 +520,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-stats-2",
           timestamp: 2000,
           level: "info",
           message: "Log 2",
@@ -507,6 +528,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-stats-3",
           timestamp: 3000,
           level: "info",
           message: "Log 3",
@@ -532,6 +554,7 @@ describe("LogSQLitePersistence", () => {
     it("should flush pending logs on close", async () => {
       // Write logs but don't wait for flush
       await persistence.write({
+        id: "test-pending",
         timestamp: Date.now(),
         level: "info",
         message: "Pending log",
@@ -552,6 +575,7 @@ describe("LogSQLitePersistence", () => {
     it("should rollback on error", async () => {
       const logs: LogRecord[] = [
         {
+          id: "test-txn-1",
           timestamp: 1000,
           level: "info",
           message: "Log 1",
@@ -559,6 +583,7 @@ describe("LogSQLitePersistence", () => {
           source: "test",
         },
         {
+          id: "test-txn-2",
           timestamp: 2000,
           level: "info",
           message: "Log 2",
@@ -583,6 +608,7 @@ describe("LogSQLitePersistence", () => {
       const longMessage = "A".repeat(10000);
 
       await persistence.write({
+        id: "test-long",
         timestamp: Date.now(),
         level: "info",
         message: longMessage,
@@ -595,7 +621,7 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].message).toBe(longMessage);
+      expect(result.logs[0]!.message).toBe(longMessage);
     });
 
     it("should handle special characters in message", async () => {
@@ -603,6 +629,7 @@ describe("LogSQLitePersistence", () => {
         "Test with 'quotes' and \"double quotes\" and \n newlines \t tabs";
 
       await persistence.write({
+        id: "test-special",
         timestamp: Date.now(),
         level: "info",
         message: specialMessage,
@@ -615,13 +642,14 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].message).toBe(specialMessage);
+      expect(result.logs[0]!.message).toBe(specialMessage);
     });
 
     it("should handle unicode characters", async () => {
       const unicodeMessage = "测试 тест 🚀 emoji";
 
       await persistence.write({
+        id: "test-unicode",
         timestamp: Date.now(),
         level: "info",
         message: unicodeMessage,
@@ -634,11 +662,12 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].message).toBe(unicodeMessage);
+      expect(result.logs[0]!.message).toBe(unicodeMessage);
     });
 
     it("should handle negative timestamps", async () => {
       await persistence.write({
+        id: "test-negative",
         timestamp: -1000,
         level: "info",
         message: "Negative timestamp",
@@ -651,7 +680,7 @@ describe("LogSQLitePersistence", () => {
       });
 
       const result = await persistence.query({});
-      expect(result.logs[0].timestamp).toBe(-1000);
+      expect(result.logs[0]!.timestamp).toBe(-1000);
     });
   });
 });

@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "Redis Cache",
   version: "1.0.0",
   description: "High-performance distributed cache using Redis",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "ICache",
   capabilities: {

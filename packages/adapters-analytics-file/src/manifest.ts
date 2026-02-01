@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "File Analytics",
   version: "1.0.0",
   description: "Local filesystem analytics adapter for development and testing",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "IAnalytics",
   optional: {

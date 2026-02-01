@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "Pino Logger",
   version: "1.0.0",
   description: "Production-ready structured logger based on Pino",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "ILogger",
   optional: {

@@ -127,6 +127,21 @@ export class OpenAILLM implements ILLM {
             tool_call_id: msg.toolCallId || "",
           };
         }
+        if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+          // Assistant message with tool calls
+          return {
+            role: "assistant" as const,
+            content: msg.content || null,
+            tool_calls: msg.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.name,
+                arguments: typeof tc.input === "string" ? tc.input : JSON.stringify(tc.input),
+              },
+            })),
+          };
+        }
         return {
           role: msg.role as "system" | "user" | "assistant",
           content: msg.content,

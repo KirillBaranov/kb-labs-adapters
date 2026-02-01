@@ -25,14 +25,14 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
-    "fs-extra": "^11.0.0",
-    "fast-glob": "^3.3.2"
+    "fast-glob": "^3.3.2",
+    "fs-extra": "^11.0.0"
   },
   "peerDependencies": {
     "@kb-labs/core-platform": "*"

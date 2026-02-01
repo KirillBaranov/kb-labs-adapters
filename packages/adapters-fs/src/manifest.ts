@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "Filesystem Storage",
   version: "1.0.0",
   description: "Local filesystem storage adapter with path security",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "IStorage",
   capabilities: {

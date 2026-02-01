@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "SQLite Log Persistence",
   version: "1.0.0",
   description: "SQLite persistence for historical log storage and search",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "extension",
   implements: "ILogPersistence",
   requires: {

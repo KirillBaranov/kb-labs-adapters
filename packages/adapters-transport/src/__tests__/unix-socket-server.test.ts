@@ -397,9 +397,9 @@ describe("UnixSocketServer", () => {
       });
 
       expect(receivedCalls).toHaveLength(3);
-      expect(receivedCalls[0].requestId).toBe("msg1");
-      expect(receivedCalls[1].requestId).toBe("msg2");
-      expect(receivedCalls[2].requestId).toBe("msg3");
+      expect(receivedCalls[0]!.requestId).toBe("msg1");
+      expect(receivedCalls[1]!.requestId).toBe("msg2");
+      expect(receivedCalls[2]!.requestId).toBe("msg3");
 
       client.destroy();
     });
@@ -441,7 +441,7 @@ describe("UnixSocketServer", () => {
       });
 
       expect(receivedCalls).toHaveLength(1);
-      expect(receivedCalls[0].requestId).toBe("valid");
+      expect(receivedCalls[0]!.requestId).toBe("valid");
 
       client.destroy();
     });
@@ -485,7 +485,7 @@ describe("UnixSocketServer", () => {
 
       // Should process valid message despite earlier error
       expect(receivedCalls).toHaveLength(1);
-      expect(receivedCalls[0].requestId).toBe("after-error");
+      expect(receivedCalls[0]!.requestId).toBe("after-error");
 
       client.destroy();
     });

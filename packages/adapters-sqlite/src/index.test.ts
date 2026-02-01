@@ -188,9 +188,9 @@ describe("SQLiteAdapter", () => {
       const result = await db.query("SELECT id, name, age FROM users", []);
 
       expect(result.fields).toHaveLength(3);
-      expect(result.fields[0]).toEqual({ name: "id", type: "INTEGER" });
-      expect(result.fields[1]).toEqual({ name: "name", type: "TEXT" });
-      expect(result.fields[2]).toEqual({ name: "age", type: "INTEGER" });
+      expect(result.fields![0]).toEqual({ name: "id", type: "INTEGER" });
+      expect(result.fields![1]).toEqual({ name: "name", type: "TEXT" });
+      expect(result.fields![2]).toEqual({ name: "age", type: "INTEGER" });
       await db.close();
     });
 

@@ -90,7 +90,7 @@ describe("SecureSQLAdapter", () => {
         [],
       );
       await base.query("INSERT INTO users (name) VALUES (?)", ["Alice"]);
-      const secure = createSecureSQL(base, { delete: true });
+      const secure = createSecureSQL(base, { write: true });
 
       await secure.query("DELETE FROM users WHERE name = ?", ["Alice"]);
 
@@ -108,7 +108,7 @@ describe("SecureSQLAdapter", () => {
         "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)",
         [],
       );
-      const secure = createSecureSQL(base, { delete: false });
+      const secure = createSecureSQL(base, { write: false });
 
       await expect(secure.query("DELETE FROM users", [])).rejects.toThrow(
         SQLPermissionError,

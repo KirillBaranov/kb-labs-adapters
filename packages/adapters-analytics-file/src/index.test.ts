@@ -55,9 +55,9 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
       );
       expect(files.length).toBeGreaterThan(0);
 
-      const filePath = path.join(testDir, files[0]);
+      const filePath = path.join(testDir, files[0]!);
       const content = await readFile(filePath, "utf-8");
-      const event = JSON.parse(content.split("\n")[0]);
+      const event = JSON.parse(content.split("\n")[0]!);
 
       // Verify event has workspace context
       expect(event.ctx).toBeDefined();
@@ -86,9 +86,9 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
       const files = await import("node:fs/promises").then((fs) =>
         fs.readdir(testDir),
       );
-      const filePath = path.join(testDir, files[0]);
+      const filePath = path.join(testDir, files[0]!);
       const content = await readFile(filePath, "utf-8");
-      const event = JSON.parse(content.split("\n")[0]);
+      const event = JSON.parse(content.split("\n")[0]!);
 
       // Verify event uses provided analyticsContext
       expect(event.source.product).toBe("@kb-labs/test-product");
@@ -113,9 +113,9 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
       const files = await import("node:fs/promises").then((fs) =>
         fs.readdir(testDir),
       );
-      const filePath = path.join(testDir, files[0]);
+      const filePath = path.join(testDir, files[0]!);
       const content = await readFile(filePath, "utf-8");
-      const event = JSON.parse(content.split("\n")[0]);
+      const event = JSON.parse(content.split("\n")[0]!);
 
       // Should use process.cwd() as fallback
       expect(event.ctx.workspace).toBe(process.cwd());
@@ -136,9 +136,9 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
       const files = await import("node:fs/promises").then((fs) =>
         fs.readdir(testDir),
       );
-      const filePath = path.join(testDir, files[0]);
+      const filePath = path.join(testDir, files[0]!);
       const content = await readFile(filePath, "utf-8");
-      const event = JSON.parse(content.split("\n")[0]);
+      const event = JSON.parse(content.split("\n")[0]!);
 
       // Should use fallback "unknown" source
       expect(event.source.product).toBe("unknown");
@@ -189,9 +189,9 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
       const files = await import("node:fs/promises").then((fs) =>
         fs.readdir(testDir),
       );
-      const filePath = path.join(testDir, files[0]);
+      const filePath = path.join(testDir, files[0]!);
       const content = await readFile(filePath, "utf-8");
-      const event = JSON.parse(content.split("\n")[0]);
+      const event = JSON.parse(content.split("\n")[0]!);
 
       // Verify event matches real REST API output
       expect(event.schema).toBe("kb.v1");

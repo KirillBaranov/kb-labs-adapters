@@ -4,7 +4,6 @@ import fs from "fs-extra";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type {
-  AnalyticsContext,
   IAnalytics,
 } from "@kb-labs/core-platform/adapters";
 
@@ -14,12 +13,7 @@ describe("FileAnalytics - getDailyStats", () => {
   let analytics: IAnalytics;
 
   beforeEach(async () => {
-    const context: AnalyticsContext = {
-      source: { product: "@kb-labs/test", version: "1.0.0" },
-      runId: randomUUID(),
-    };
-
-    analytics = createAdapter({ baseDir: TEST_BASE_DIR }, context);
+    analytics = createAdapter({ baseDir: TEST_BASE_DIR });
     await fs.ensureDir(TEST_BASE_DIR);
   });
 
@@ -45,16 +39,16 @@ describe("FileAnalytics - getDailyStats", () => {
       });
 
       // Get stats
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: "llm.completion.completed",
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].count).toBe(2);
-      expect(stats[0].metrics?.totalTokens).toBe(2500);
-      expect(stats[0].metrics?.totalCost).toBeCloseTo(0.12, 2);
-      expect(stats[0].metrics?.avgDurationMs).toBe(1750);
-      expect(stats[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(stats![0]!.count).toBe(2);
+      expect(stats![0]!.metrics?.totalTokens).toBe(2500);
+      expect(stats![0]!.metrics?.totalCost).toBeCloseTo(0.12, 2);
+      expect(stats![0]!.metrics?.avgDurationMs).toBe(1750);
+      expect(stats![0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
     it("should filter by date range", async () => {
@@ -75,7 +69,7 @@ describe("FileAnalytics - getDailyStats", () => {
         .split("T")[0];
 
       // Query for future dates (should be empty)
-      const futureStats = await analytics.getDailyStats({
+      const futureStats = await analytics.getDailyStats?.({
         type: "llm.completion.completed",
         from: `${tomorrow}T00:00:00Z`,
         to: `${tomorrow}T23:59:59Z`,
@@ -84,18 +78,18 @@ describe("FileAnalytics - getDailyStats", () => {
       expect(futureStats).toHaveLength(0);
 
       // Query for today (should have data)
-      const todayStats = await analytics.getDailyStats({
+      const todayStats = await analytics.getDailyStats?.({
         type: "llm.completion.completed",
         from: `${yesterday}T00:00:00Z`,
         to: `${tomorrow}T23:59:59Z`,
       });
 
       expect(todayStats).toHaveLength(1);
-      expect(todayStats[0].date).toBe(today);
+      expect(todayStats![0]!.date).toBe(today);
     });
 
     it("should return empty array when no events match", async () => {
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: "llm.completion.completed",
       });
 
@@ -119,12 +113,12 @@ describe("FileAnalytics - getDailyStats", () => {
         durationMs: 250,
       });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: "embeddings.generate.completed",
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0]).toMatchObject({
+      expect(stats![0]!).toMatchObject({
         count: 2,
         metrics: {
           totalTokens: 1200,
@@ -156,7 +150,7 @@ describe("FileAnalytics - getDailyStats", () => {
         durationMs: 30,
       });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: [
           "vectorstore.search.completed",
           "vectorstore.upsert.completed",
@@ -165,8 +159,8 @@ describe("FileAnalytics - getDailyStats", () => {
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].count).toBe(4);
-      expect(stats[0].metrics).toMatchObject({
+      expect(stats![0]!.count).toBe(4);
+      expect(stats![0]!.metrics).toMatchObject({
         totalSearches: 2,
         totalUpserts: 1,
         totalDeletes: 1,
@@ -185,13 +179,13 @@ describe("FileAnalytics - getDailyStats", () => {
       await analytics.track("cache.miss", { durationMs: 1 });
       await analytics.track("cache.set", { durationMs: 5 });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: ["cache.hit", "cache.miss", "cache.set"],
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].count).toBe(6);
-      expect(stats[0].metrics).toMatchObject({
+      expect(stats![0]!.count).toBe(6);
+      expect(stats![0]!.metrics).toMatchObject({
         totalHits: 3,
         totalMisses: 2,
         totalSets: 1,
@@ -202,12 +196,12 @@ describe("FileAnalytics - getDailyStats", () => {
     it("should handle zero gets gracefully", async () => {
       await analytics.track("cache.set", { durationMs: 5 });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: ["cache.hit", "cache.miss", "cache.set"],
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].metrics?.hitRate).toBe(0);
+      expect(stats![0]!.metrics?.hitRate).toBe(0);
     });
   });
 
@@ -232,7 +226,7 @@ describe("FileAnalytics - getDailyStats", () => {
         durationMs: 5,
       });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: [
           "storage.read.completed",
           "storage.write.completed",
@@ -241,8 +235,8 @@ describe("FileAnalytics - getDailyStats", () => {
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].count).toBe(4);
-      expect(stats[0].metrics).toMatchObject({
+      expect(stats![0]!.count).toBe(4);
+      expect(stats![0]!.metrics).toMatchObject({
         totalBytesRead: 3072,
         totalBytesWritten: 512,
         avgDurationMs: 12.5, // (10 + 15 + 20 + 5) / 4
@@ -263,12 +257,12 @@ describe("FileAnalytics - getDailyStats", () => {
         durationMs: 100,
       });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: "llm.completion.completed",
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(stats![0]!.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
   });
 
@@ -278,13 +272,13 @@ describe("FileAnalytics - getDailyStats", () => {
         someData: "value",
       });
 
-      const stats = await analytics.getDailyStats({
+      const stats = await analytics.getDailyStats?.({
         type: "custom.event",
       });
 
       expect(stats).toHaveLength(1);
-      expect(stats[0].count).toBe(1);
-      expect(stats[0].metrics).toBeUndefined();
+      expect(stats![0]!.count).toBe(1);
+      expect(stats![0]!.metrics).toBeUndefined();
     });
   });
 });

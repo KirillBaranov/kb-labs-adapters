@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "Qdrant Vector Store",
   version: "1.0.0",
   description: "High-performance vector database for semantic search and RAG",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "IVectorStore",
   capabilities: {

@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "Log Ring Buffer",
   version: "1.0.0",
   description: "In-memory ring buffer for real-time log streaming",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "extension",
   implements: "ILogRingBuffer",
   extends: {

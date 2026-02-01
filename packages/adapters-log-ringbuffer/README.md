@@ -1,5 +1,7 @@
 # @kb-labs/adapters-log-ringbuffer
 
+> Part of [KB Labs](https://github.com/KirillBaranov/kb-labs) ecosystem. Works exclusively within KB Labs platform.
+
 In-memory ring buffer adapter for real-time log streaming in KB Labs.
 
 ## Features
@@ -223,4 +225,4 @@ const buffer = createAdapter({
 
 ## License
 
-MIT
+[KB Public License v1.1](../../LICENSE) - KB Labs Team

@@ -1,5 +1,7 @@
 # @kb-labs/adapters-log-sqlite
 
+> Part of [KB Labs](https://github.com/KirillBaranov/kb-labs) ecosystem. Works exclusively within KB Labs platform.
+
 SQLite persistence adapter for KB Labs logs. Provides long-term storage, cross-process log aggregation, and full-text search.
 
 ## Features
@@ -391,4 +393,4 @@ For best results, use both adapters together:
 
 ## License
 
-MIT
+[KB Public License v1.1](../../LICENSE) - KB Labs Team

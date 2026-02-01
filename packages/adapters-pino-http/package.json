@@ -21,12 +21,13 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "pino": "latest",
     "pino-abstract-transport": "^2.0.0"
   },
   "devDependencies": {

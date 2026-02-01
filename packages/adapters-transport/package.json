@@ -17,12 +17,14 @@
     "clean": "rimraf dist",
     "dev": "tsup --watch",
     "type-check": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint . --fix",
     "test:watch": "vitest"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@kb-labs/core-runtime": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^24.3.3",
     "eslint": "^9",

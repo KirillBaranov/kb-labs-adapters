@@ -14,8 +14,8 @@ export const manifest: AdapterManifest = {
   name: "SQLite Database",
   version: "1.0.0",
   description: "Lightweight embedded SQL database using better-sqlite3",
-  author: "KB Labs",
-  license: "MIT",
+  author: "KB Labs Team",
+  license: "KBPL-1.1",
   type: "core",
   implements: "ISQLDatabase",
   capabilities: {

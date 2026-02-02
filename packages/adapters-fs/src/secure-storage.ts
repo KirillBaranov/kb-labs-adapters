@@ -93,6 +93,7 @@ export class SecureStorageAdapter implements IStorage {
   /**
    * Check if a path is allowed by permissions.
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Security-critical permission check with denylist/allowlist logic
   private checkPath(
     path: string,
     operation: "read" | "write" | "delete",

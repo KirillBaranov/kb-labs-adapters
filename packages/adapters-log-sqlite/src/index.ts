@@ -135,6 +135,7 @@ export class LogSQLitePersistence implements ILogPersistence {
         .filter((s) => s.length > 0);
 
       for (const statement of statements) {
+        // eslint-disable-next-line no-await-in-loop -- Database initialization: statements must execute sequentially
         await this.db.query(statement);
       }
     }
@@ -426,6 +427,7 @@ export class LogSQLitePersistence implements ILogPersistence {
    * Flush pending logs to database.
    * @private
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Batch insert with transaction, validation, and error recovery
   private async flush(): Promise<void> {
     if (this.writeQueue.length === 0 || this.flushing) {
       return;
@@ -479,6 +481,7 @@ export class LogSQLitePersistence implements ILogPersistence {
           }
 
           try {
+            // eslint-disable-next-line no-await-in-loop -- Transaction batch insert: must insert records sequentially
             await trx.query(insertQuery, params);
           } catch (queryError) {
             // Debug: log params on error

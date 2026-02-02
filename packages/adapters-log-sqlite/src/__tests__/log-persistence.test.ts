@@ -58,6 +58,7 @@ describe("LogSQLitePersistence", () => {
     it("should flush when batch size is reached", async () => {
       // Write 5 logs (batch size)
       for (let i = 0; i < 5; i++) {
+        // eslint-disable-next-line no-await-in-loop -- Test setup: creating sequential test data
         await persistence.write({
           id: `test-batch-${i}`,
           timestamp: Date.now() + i,

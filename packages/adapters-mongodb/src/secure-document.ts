@@ -113,25 +113,21 @@ export class SecureDocumentAdapter implements IDocumentDatabase {
     }
 
     // Check denylist first (takes precedence)
-    if (this.permissions.denylist) {
-      if (this.permissions.denylist.includes(collection)) {
-        throw new DocumentPermissionError(
-          operation,
-          collection,
-          `collection is in denylist`,
-        );
-      }
+    if (this.permissions.denylist?.includes(collection)) {
+      throw new DocumentPermissionError(
+        operation,
+        collection,
+        `collection is in denylist`,
+      );
     }
 
     // Check allowlist (if defined)
-    if (this.permissions.allowlist && this.permissions.allowlist.length > 0) {
-      if (!this.permissions.allowlist.includes(collection)) {
-        throw new DocumentPermissionError(
-          operation,
-          collection,
-          `collection not in allowlist: [${this.permissions.allowlist.join(", ")}]`,
-        );
-      }
+    if (this.permissions.allowlist && this.permissions.allowlist.length > 0 && !this.permissions.allowlist.includes(collection)) {
+      throw new DocumentPermissionError(
+        operation,
+        collection,
+        `collection not in allowlist: [${this.permissions.allowlist.join(", ")}]`,
+      );
     }
   }
 

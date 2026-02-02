@@ -56,14 +56,13 @@ export interface QdrantVectorStoreConfig {
 function stringToUUID(str: string): string {
   const hash = createHash("sha256").update(str).digest();
   // Format as UUID v4 (8-4-4-4-12 hex digits)
-  const uuid = [
+  return [
     hash.slice(0, 4).toString("hex"),
     hash.slice(4, 6).toString("hex"),
     hash.slice(6, 8).toString("hex"),
     hash.slice(8, 10).toString("hex"),
     hash.slice(10, 16).toString("hex"),
   ].join("-");
-  return uuid;
 }
 
 /**
@@ -234,6 +233,7 @@ export class QdrantVectorStore implements IVectorStore {
 
       // Wait for this group of concurrent batches to complete
       try {
+        // eslint-disable-next-line no-await-in-loop -- Adaptive concurrency control: must wait for batch group before processing next
         await Promise.all(batchPromises);
         batchIndex += batchGroup.length;
       } catch (_error) {

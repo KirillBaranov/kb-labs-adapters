@@ -229,6 +229,7 @@ class FileAnalytics implements IAnalytics {
     };
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Analytics aggregation with grouping, counting, and date ranges
   async getStats(): Promise<EventsStats> {
     // Cache key for stats
     const cacheKey = "analytics:file:stats";
@@ -305,6 +306,7 @@ class FileAnalytics implements IAnalytics {
     return stats;
   }
 
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Complex daily aggregation with grouping by date, type, userId, and sessionId
   async getDailyStats(query?: EventsQuery): Promise<DailyStats[]> {
     // First, get filtered events using existing getEvents method
     const { events } = await this.getEvents(query);
@@ -462,10 +464,12 @@ class FileAnalytics implements IAnalytics {
 
       for (const file of jsonlFiles) {
         const filePath = join(this.baseDir, file);
+        // eslint-disable-next-line no-await-in-loop -- Reading file stats sequentially for metadata collection
         const stats = await fs.stat(filePath);
         totalSize += stats.size;
 
         // Read first and last line to get timestamps
+        // eslint-disable-next-line no-await-in-loop -- Reading file content sequentially for timestamp extraction
         const content = await fs.readFile(filePath, "utf-8");
         const lines = content
           .trim()
@@ -540,6 +544,7 @@ class FileAnalytics implements IAnalytics {
 
       for (const file of jsonlFiles) {
         const filePath = join(this.baseDir, file);
+        // eslint-disable-next-line no-await-in-loop -- Loading all events from files sequentially
         const content = await fs.readFile(filePath, "utf-8");
         const lines = content
           .trim()

@@ -103,7 +103,7 @@ export class FilesystemStorageAdapter implements IStorage {
   async list(prefix: string): Promise<string[]> {
     // List files with a given prefix in their name
     const pattern = `${prefix}*`;
-    return await fg(pattern, {
+    return fg(pattern, {
       onlyFiles: true,
       absolute: false,
       cwd: this.baseDir,

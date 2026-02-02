@@ -309,7 +309,7 @@ describe("SecureStorageAdapter", () => {
 
       expect(files).toBeDefined();
       expect(files!.length).toBeGreaterThan(0);
-      expect(files![0].path).toBeDefined();
+      expect(files![0]!.path).toBeDefined();
     });
   });
 

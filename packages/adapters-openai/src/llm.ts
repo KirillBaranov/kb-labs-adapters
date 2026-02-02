@@ -111,6 +111,7 @@ export class OpenAILLM implements ILLM {
    * Chat with native tool calling support.
    * Uses OpenAI's native function calling API.
    */
+  // eslint-disable-next-line sonarjs/cognitive-complexity -- Complex due to OpenAI API format conversion (messages, tools, tool_choice)
   async chatWithTools(
     messages: LLMMessage[],
     options: LLMToolCallOptions,

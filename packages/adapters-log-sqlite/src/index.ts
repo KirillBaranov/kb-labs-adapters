@@ -50,11 +50,33 @@ import { dirname, join } from "node:path";
 import type {
   ILogPersistence,
   LogPersistenceConfig,
+  LogRetentionPolicy,
   LogRecord,
   LogQuery,
   ISQLDatabase,
 } from "@kb-labs/core-platform/adapters";
 import { generateLogId } from "@kb-labs/core-platform/adapters";
+
+/** Default retention: 7 days for warn/error/fatal */
+const DEFAULT_MAX_AGE = 7 * 24 * 60 * 60 * 1000;
+/** Default retention: 1 hour for debug/trace */
+const DEFAULT_MAX_AGE_DEBUG = 60 * 60 * 1000;
+/** Default retention: 24 hours for info */
+const DEFAULT_MAX_AGE_INFO = 24 * 60 * 60 * 1000;
+/** Default max DB size: 500 MB */
+const DEFAULT_MAX_SIZE_BYTES = 500 * 1024 * 1024;
+/** Default cleanup interval: 5 minutes */
+const DEFAULT_CLEANUP_INTERVAL = 5 * 60 * 1000;
+/** Batch size for size-based cleanup deletes */
+const SIZE_CLEANUP_BATCH = 10_000;
+/** Check DB size every N retention cycles (not every cycle) */
+const SIZE_CHECK_EVERY_N_CYCLES = 10;
+/** Levels that are filtered by maxAgeDebug */
+const DEBUG_LEVELS = ["debug", "trace"];
+/** Levels that are filtered by maxAgeInfo */
+const INFO_LEVELS = ["info"];
+/** Levels that are filtered by maxAge */
+const IMPORTANT_LEVELS = ["warn", "error", "fatal"];
 
 // Re-export manifest
 export { manifest } from "./manifest.js";
@@ -83,13 +105,51 @@ export class LogSQLitePersistence implements ILogPersistence {
   private flushInterval: number;
   private writeQueue: LogRecord[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
+  private retentionTimer: NodeJS.Timeout | null = null;
   private flushing = false;
+  private maxRetries: number;
+  private retryBaseDelayMs: number;
+  private retryMaxDelayMs: number;
+  private maxQueueSize: number;
+  private droppedLogs = 0;
+  private nextFlushNotBefore = 0;
+  private shuttingDown = false;
+  private closed = false;
+  private closedWarningLogged = false;
+
+  // Retention policy
+  private retentionMaxAge: number;
+  private retentionMaxAgeDebug: number;
+  private retentionMaxAgeInfo: number;
+  private retentionMaxSizeBytes: number;
+  private retentionCleanupIntervalMs: number;
+  private retentionCycleCount = 0;
+  private totalWritesSinceLastRetention = 0;
+  private lastRetentionDeletedAny = true; // assume dirty on first run
 
   constructor(config: LogPersistenceConfig) {
     this.db = config.database;
     this.tableName = config.tableName ?? "logs";
     this.batchSize = config.batchSize ?? 100;
     this.flushInterval = config.flushInterval ?? 5000; // 5 seconds
+    const runtime = config as LogPersistenceConfig & {
+      retryAttempts?: number;
+      retryBaseDelayMs?: number;
+      retryMaxDelayMs?: number;
+      maxQueueSize?: number;
+    };
+    this.maxRetries = runtime.retryAttempts ?? 5;
+    this.retryBaseDelayMs = runtime.retryBaseDelayMs ?? 50;
+    this.retryMaxDelayMs = runtime.retryMaxDelayMs ?? 3000;
+    this.maxQueueSize = runtime.maxQueueSize ?? 10_000;
+
+    // Retention policy (defaults always apply to prevent unbounded growth)
+    const retention: LogRetentionPolicy = config.retention ?? {};
+    this.retentionMaxAge = retention.maxAge ?? DEFAULT_MAX_AGE;
+    this.retentionMaxAgeDebug = retention.maxAgeDebug ?? DEFAULT_MAX_AGE_DEBUG;
+    this.retentionMaxAgeInfo = retention.maxAgeInfo ?? DEFAULT_MAX_AGE_INFO;
+    this.retentionMaxSizeBytes = retention.maxSizeBytes ?? DEFAULT_MAX_SIZE_BYTES;
+    this.retentionCleanupIntervalMs = retention.cleanupIntervalMs ?? DEFAULT_CLEANUP_INTERVAL;
   }
 
   /**
@@ -135,21 +195,31 @@ export class LogSQLitePersistence implements ILogPersistence {
         .filter((s) => s.length > 0);
 
       for (const statement of statements) {
-        // eslint-disable-next-line no-await-in-loop -- Database initialization: statements must execute sequentially
+         
         await this.db.query(statement);
       }
     }
 
     // Start auto-flush timer
     this.startFlushTimer();
+
+    // Start retention cleanup timer
+    this.startRetentionTimer();
   }
 
   /**
    * Write log record to persistent storage.
    * Logs are queued and flushed in batches.
+   * Debug/trace logs are skipped when maxAgeDebug is 0.
    */
   async write(record: LogRecord): Promise<void> {
-    this.writeQueue.push(record);
+    if (this.shuttingDown || this.closed) {
+      return;
+    }
+    if (this.shouldSkipLevel(record.level)) {
+      return;
+    }
+    this.enqueueRecords([record]);
 
     // Flush if batch is full
     if (this.writeQueue.length >= this.batchSize) {
@@ -160,9 +230,17 @@ export class LogSQLitePersistence implements ILogPersistence {
   /**
    * Write multiple log records in batch.
    * More efficient than multiple write() calls.
+   * Debug/trace logs are filtered when maxAgeDebug is 0.
    */
   async writeBatch(records: LogRecord[]): Promise<void> {
-    this.writeQueue.push(...records);
+    if (this.shuttingDown || this.closed) {
+      return;
+    }
+    const filtered = records.filter((r) => !this.shouldSkipLevel(r.level));
+    if (filtered.length === 0) {
+      return;
+    }
+    this.enqueueRecords(filtered);
 
     // Flush if batch is full
     if (this.writeQueue.length >= this.batchSize) {
@@ -367,6 +445,22 @@ export class LogSQLitePersistence implements ILogPersistence {
   }
 
   /**
+   * Delete logs matching specific levels older than specified timestamp.
+   */
+  async deleteByLevelOlderThan(
+    levels: string[],
+    beforeTimestamp: number,
+  ): Promise<number> {
+    if (levels.length === 0) {
+      return 0;
+    }
+    const placeholders = levels.map(() => "?").join(",");
+    const query = `DELETE FROM ${this.tableName} WHERE level IN (${placeholders}) AND timestamp < ?`;
+    const result = await this.db.query(query, [...levels, beforeTimestamp]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
    * Get statistics about stored logs.
    */
   async getStats(): Promise<{
@@ -413,23 +507,33 @@ export class LogSQLitePersistence implements ILogPersistence {
    * Close persistence adapter and flush pending writes.
    */
   async close(): Promise<void> {
+    this.shuttingDown = true;
     // Stop flush timer
     if (this.flushTimer) {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+    // Stop retention timer
+    if (this.retentionTimer) {
+      clearInterval(this.retentionTimer);
+      this.retentionTimer = null;
+    }
 
     // Flush remaining logs
     await this.flush();
+    this.closed = true;
   }
 
   /**
    * Flush pending logs to database.
    * @private
    */
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- Batch insert with transaction, validation, and error recovery
+   
   private async flush(): Promise<void> {
     if (this.writeQueue.length === 0 || this.flushing) {
+      return;
+    }
+    if (Date.now() < this.nextFlushNotBefore) {
       return;
     }
 
@@ -437,81 +541,207 @@ export class LogSQLitePersistence implements ILogPersistence {
 
     try {
       const batch = this.writeQueue.splice(0, this.writeQueue.length);
-
-      // Insert logs in batch using transaction
-      const trx = await this.db.transaction();
-
-      try {
-        const insertQuery = `
-          INSERT INTO ${this.tableName} (id, timestamp, level, message, source, fields)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `;
-
-        for (const record of batch) {
-          // Ensure record has an id (generate if missing and persist it)
-          if (!record.id) {
-            record.id = this.generateId();
-          }
-
-          const params = [
-            record.id,
-            record.timestamp,
-            record.level,
-            // Ensure message is always a string (handle objects, arrays, etc.)
-            typeof record.message === "string"
-              ? record.message
-              : JSON.stringify(record.message),
-            record.source,
-            record.fields && Object.keys(record.fields).length > 0
-              ? JSON.stringify(record.fields)
-              : null,
-          ];
-
-          // Debug: validate params
-          if (params.length !== 6 || params.some((p) => p === undefined)) {
-            console.error("[LogSQLitePersistence] Invalid params:", {
-              expected: 6,
-              actual: params.length,
-              params,
-              record,
-            });
-            throw new Error(
-              `Invalid parameters: expected 6, got ${params.length}. Undefined values: ${params.map((p, i) => (p === undefined ? i : null)).filter((i) => i !== null)}`,
-            );
-          }
-
-          try {
-            // eslint-disable-next-line no-await-in-loop -- Transaction batch insert: must insert records sequentially
-            await trx.query(insertQuery, params);
-          } catch (queryError) {
-            // Debug: log params on error
-            console.error("[LogSQLitePersistence] Query failed with params:", {
-              paramsLength: params.length,
-              params: params.map((p, i) => ({
-                index: i,
-                type: typeof p,
-                isNull: p === null,
-                isUndefined: p === undefined,
-                value: p,
-              })),
-              record,
-              error:
-                queryError instanceof Error
-                  ? queryError.message
-                  : String(queryError),
-            });
-            throw queryError;
-          }
-        }
-
-        await trx.commit();
-      } catch (error) {
-        await trx.rollback();
-        throw error;
+      const flushed = await this.flushWithRetry(batch);
+      if (!flushed) {
+        this.requeueToFront(batch);
       }
     } finally {
       this.flushing = false;
     }
+  }
+
+  private async flushWithRetry(batch: LogRecord[]): Promise<boolean> {
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        await this.insertBatch(batch);
+        return true;
+      } catch (error) {
+        if (this.handleClosedFlushError(error)) {
+          return true;
+        }
+
+        if (!this.isRetryableLockError(error)) {
+          this.handleNonRetryableFlushError(batch, error);
+          return true;
+        }
+
+        if (attempt >= this.maxRetries) {
+          this.handleLockedFlushRetryExhausted(batch, attempt, error);
+          return false;
+        }
+
+        const delay = this.computeRetryDelayMs(attempt);
+        await this.sleep(delay);
+      }
+    }
+
+    return false;
+  }
+
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
+  private handleClosedFlushError(error: unknown): boolean {
+    if (!this.isClosedConnectionError(error)) {
+      return false;
+    }
+    if (!this.closedWarningLogged && !this.shuttingDown) {
+      this.closedWarningLogged = true;
+      console.warn(
+        "[LogSQLitePersistence] Database connection is closed, skipping persistence writes.",
+      );
+    }
+    return true;
+  }
+
+  private handleNonRetryableFlushError(batch: LogRecord[], error: unknown): void {
+    this.droppedLogs += batch.length;
+    console.error(
+      "[LogSQLitePersistence] Non-retryable flush failure, dropping batch:",
+      {
+        batchSize: batch.length,
+        droppedLogs: this.droppedLogs,
+        error: this.getErrorMessage(error),
+      },
+    );
+  }
+
+  private handleLockedFlushRetryExhausted(
+    batch: LogRecord[],
+    attempt: number,
+    error: unknown,
+  ): void {
+    const delay = this.computeRetryDelayMs(attempt);
+    this.nextFlushNotBefore = Date.now() + delay;
+    console.warn(
+      "[LogSQLitePersistence] DB locked after retries, keeping batch in queue:",
+      {
+        batchSize: batch.length,
+        retryAttempts: this.maxRetries,
+        nextRetryInMs: delay,
+        error: this.getErrorMessage(error),
+      },
+    );
+  }
+
+  private async insertBatch(batch: LogRecord[]): Promise<void> {
+    const trx = await this.db.transaction();
+
+    try {
+      const insertQuery = `
+        INSERT INTO ${this.tableName} (id, timestamp, level, message, source, fields)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `;
+
+      for (const record of batch) {
+        if (!record.id) {
+          record.id = this.generateId();
+        }
+
+        const params = [
+          record.id,
+          record.timestamp,
+          record.level,
+          typeof record.message === "string"
+            ? record.message
+            : JSON.stringify(record.message),
+          record.source,
+          record.fields && Object.keys(record.fields).length > 0
+            ? JSON.stringify(record.fields)
+            : null,
+        ];
+
+        if (params.length !== 6 || params.some((p) => p === undefined)) {
+          throw new Error(
+            `Invalid parameters: expected 6, got ${params.length}.`,
+          );
+        }
+
+
+        await trx.query(insertQuery, params);
+      }
+
+      await trx.commit();
+      this.totalWritesSinceLastRetention += batch.length;
+    } catch (error) {
+      try {
+        await trx.rollback();
+      } catch {
+        // ignore rollback errors, original error is more important
+      }
+      throw error;
+    }
+  }
+
+  private enqueueRecords(records: LogRecord[]): void {
+    if (records.length === 0) {
+      return;
+    }
+
+    this.writeQueue.push(...records);
+    if (this.writeQueue.length <= this.maxQueueSize) {
+      return;
+    }
+
+    const overflow = this.writeQueue.length - this.maxQueueSize;
+    this.writeQueue.splice(0, overflow);
+    this.droppedLogs += overflow;
+    console.warn("[LogSQLitePersistence] Queue overflow, dropping oldest logs:", {
+      dropped: overflow,
+      maxQueueSize: this.maxQueueSize,
+      droppedLogs: this.droppedLogs,
+    });
+  }
+
+  private requeueToFront(batch: LogRecord[]): void {
+    this.writeQueue = [...batch, ...this.writeQueue];
+    if (this.writeQueue.length > this.maxQueueSize) {
+      const overflow = this.writeQueue.length - this.maxQueueSize;
+      this.writeQueue.splice(this.maxQueueSize, overflow);
+      this.droppedLogs += overflow;
+      console.warn(
+        "[LogSQLitePersistence] Queue overflow after requeue, dropping newest tail logs:",
+        {
+          dropped: overflow,
+          maxQueueSize: this.maxQueueSize,
+          droppedLogs: this.droppedLogs,
+        },
+      );
+    }
+  }
+
+  private isRetryableLockError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    const normalized = msg.toLowerCase();
+    return (
+      normalized.includes("database is locked") ||
+      normalized.includes("database schema is locked") ||
+      normalized.includes("sqlite_busy") ||
+      normalized.includes("sqlite_locked")
+    );
+  }
+
+  private isClosedConnectionError(error: unknown): boolean {
+    const msg = error instanceof Error ? error.message : String(error);
+    const normalized = msg.toLowerCase();
+    return (
+      normalized.includes("database connection is closed") ||
+      normalized.includes("connection is closed")
+    );
+  }
+
+  private computeRetryDelayMs(attempt: number): number {
+    const exp = this.retryBaseDelayMs * 2 ** Math.max(0, attempt);
+    const capped = Math.min(exp, this.retryMaxDelayMs);
+    const jitter = Math.floor(Math.random() * Math.min(50, Math.max(1, capped / 4)));
+    return capped + jitter;
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    await new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
   }
 
   /**
@@ -532,6 +762,210 @@ export class LogSQLitePersistence implements ILogPersistence {
     if (this.flushTimer.unref) {
       this.flushTimer.unref();
     }
+  }
+
+  /**
+   * Start periodic retention cleanup timer.
+   * Runs cleanup at configured interval to enforce retention policies.
+   * @private
+   */
+  private startRetentionTimer(): void {
+    // Run first cleanup after a short delay (don't block startup)
+    const initialDelay = Math.min(this.retentionCleanupIntervalMs, 10_000);
+    const initialTimer = setTimeout(() => {
+      this.runRetention().catch((error) => {
+        console.error(
+          "[LogSQLitePersistence] Retention cleanup failed:",
+          error,
+        );
+      });
+    }, initialDelay);
+    if (initialTimer.unref) {
+      initialTimer.unref();
+    }
+
+    this.retentionTimer = setInterval(() => {
+      this.runRetention().catch((error) => {
+        console.error(
+          "[LogSQLitePersistence] Retention cleanup failed:",
+          error,
+        );
+      });
+    }, this.retentionCleanupIntervalMs);
+
+    if (this.retentionTimer.unref) {
+      this.retentionTimer.unref();
+    }
+  }
+
+  /**
+   * Run retention cleanup: delete expired logs by level, then enforce size limit.
+   *
+   * I/O optimization:
+   * - Skips TTL cleanup only when: no writes AND last cleanup deleted nothing
+   *   (meaning DB is already clean — no stale rows remain)
+   * - Uses a single combined DELETE with OR instead of 3 separate queries
+   * - Size check runs only every N cycles (not every time)
+   * @private
+   */
+  private async runRetention(): Promise<void> {
+    if (this.shuttingDown || this.closed) {
+      return;
+    }
+
+    this.retentionCycleCount++;
+    const hadWrites = this.totalWritesSinceLastRetention > 0;
+    this.totalWritesSinceLastRetention = 0;
+
+    // Run TTL cleanup when there are new writes OR when previous run deleted rows
+    // (stale data may still remain). Skip only when DB is confirmed clean.
+    const shouldRunTTL = hadWrites || this.lastRetentionDeletedAny;
+
+    const shouldCheckSize =
+      this.retentionMaxSizeBytes > 0 &&
+      this.retentionCycleCount % SIZE_CHECK_EVERY_N_CYCLES === 0;
+
+    if (!shouldRunTTL && !shouldCheckSize) {
+      return;
+    }
+
+    try {
+      let totalDeleted = 0;
+
+      // Time-based cleanup: single query with OR conditions
+      if (shouldRunTTL) {
+        const deleted = await this.deleteExpiredLogs();
+        totalDeleted += deleted;
+        this.lastRetentionDeletedAny = deleted > 0;
+      }
+
+      // Size-based cleanup: expensive, runs infrequently
+      if (shouldCheckSize) {
+        const sizeDeleted = await this.enforceSizeLimit();
+        totalDeleted += sizeDeleted;
+      }
+
+      if (totalDeleted > 0) {
+        console.log(
+          `[LogSQLitePersistence] Retention cleanup: deleted ${totalDeleted} logs`,
+        );
+      }
+    } catch (error) {
+      // Don't let retention errors crash the process
+      if (!this.isClosedConnectionError(error)) {
+        console.error(
+          "[LogSQLitePersistence] Retention cleanup error:",
+          this.getErrorMessage(error),
+        );
+      }
+    }
+  }
+
+  /**
+   * Delete expired logs using a single combined query.
+   * Combines all level-based TTLs into one DELETE statement to minimize I/O.
+   * @private
+   */
+  private async deleteExpiredLogs(): Promise<number> {
+    const now = Date.now();
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+
+    // debug/trace TTL
+    if (this.retentionMaxAgeDebug > 0) {
+      const cutoff = now - this.retentionMaxAgeDebug;
+      conditions.push(`(level IN ('debug', 'trace') AND timestamp < ?)`);
+      params.push(cutoff);
+    }
+
+    // info TTL
+    if (this.retentionMaxAgeInfo > 0) {
+      const cutoff = now - this.retentionMaxAgeInfo;
+      conditions.push(`(level = 'info' AND timestamp < ?)`);
+      params.push(cutoff);
+    }
+
+    // warn/error/fatal TTL
+    if (this.retentionMaxAge > 0) {
+      const cutoff = now - this.retentionMaxAge;
+      conditions.push(`(level IN ('warn', 'error', 'fatal') AND timestamp < ?)`);
+      params.push(cutoff);
+    }
+
+    if (conditions.length === 0) {
+      return 0;
+    }
+
+    const query = `DELETE FROM ${this.tableName} WHERE ${conditions.join(" OR ")}`;
+    const result = await this.db.query(query, params);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Delete oldest logs in batches until DB size is under maxSizeBytes.
+   * @private
+   */
+  private async enforceSizeLimit(): Promise<number> {
+    let totalDeleted = 0;
+    let iterations = 0;
+    const maxIterations = 100; // Safety valve
+
+    while (iterations < maxIterations) {
+      iterations++;
+      const stats = await this.getStats();
+      if (stats.sizeBytes <= this.retentionMaxSizeBytes) {
+        break;
+      }
+      if (stats.totalLogs === 0) {
+        break;
+      }
+
+      // Delete oldest batch
+      const oldestQuery = `
+        SELECT MAX(timestamp) as cutoff FROM (
+          SELECT timestamp FROM ${this.tableName}
+          ORDER BY timestamp ASC
+          LIMIT ${SIZE_CLEANUP_BATCH}
+        )
+      `;
+      const cutoffResult = await this.db.query<{ cutoff: number | null }>(oldestQuery);
+      const cutoff = cutoffResult.rows[0]?.cutoff;
+      if (cutoff == null) {
+        break;
+      }
+
+      const deleted = await this.deleteOlderThan(cutoff + 1);
+      totalDeleted += deleted;
+      if (deleted === 0) {
+        break;
+      }
+    }
+
+    // VACUUM if we deleted a significant amount
+    if (totalDeleted > SIZE_CLEANUP_BATCH) {
+      try {
+        await this.db.query("VACUUM");
+      } catch {
+        // VACUUM can fail if DB is locked by another connection — not critical
+      }
+    }
+
+    return totalDeleted;
+  }
+
+  /**
+   * Check if a log level should be skipped (not persisted).
+   * Debug/trace are skipped when maxAgeDebug is 0.
+   * @private
+   */
+  private shouldSkipLevel(level: string): boolean {
+    if (this.retentionMaxAgeDebug === 0 && DEBUG_LEVELS.includes(level)) {
+      return true;
+    }
+    if (this.retentionMaxAgeInfo === 0 && INFO_LEVELS.includes(level)) {
+      return true;
+    }
+    return false;
   }
 
   /**

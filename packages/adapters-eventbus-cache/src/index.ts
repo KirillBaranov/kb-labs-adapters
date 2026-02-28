@@ -111,7 +111,7 @@ export class CacheEventBusAdapter implements IEventBus {
         for (const eventJson of events) {
           try {
             const storedEvent = JSON.parse(eventJson) as StoredEvent<T>;
-            // eslint-disable-next-line no-await-in-loop -- Sequential processing required for event ordering
+             
             await handler(storedEvent.data);
             subscription.lastTimestamp = storedEvent.timestamp;
           } catch (err) {

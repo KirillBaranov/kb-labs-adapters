@@ -99,7 +99,7 @@ export default async function (opts: HTTPTransportOptions) {
     // Retry with exponential backoff
     for (let attempt = 0; attempt < config.retryAttempts; attempt++) {
       try {
-        // eslint-disable-next-line no-await-in-loop -- Retry logic: must wait for response before next attempt
+         
         const response = await fetch(config.url, {
           method: "POST",
           headers: {
@@ -135,7 +135,7 @@ export default async function (opts: HTTPTransportOptions) {
           );
         }
 
-        // eslint-disable-next-line no-await-in-loop -- Exponential backoff: must wait before retry
+         
         await new Promise((resolve) => {
           setTimeout(resolve, delayMs);
         });

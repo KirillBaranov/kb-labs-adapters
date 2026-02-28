@@ -30,7 +30,7 @@ describe("Analytics Source Attribution", () => {
   describe("Default behavior (current implementation)", () => {
     it("should use source from AnalyticsContext", async () => {
       // Create analytics with explicit context (simulating root package.json)
-      const _context: AnalyticsContext = {
+      const context: AnalyticsContext = {
         source: {
           product: "@kb-labs/ai-review",
           version: "1.0.0",
@@ -38,7 +38,7 @@ describe("Analytics Source Attribution", () => {
         runId: "test-run-123",
       };
 
-      analytics = createAdapter({ baseDir: testDir });
+      analytics = createAdapter({ baseDir: testDir, analytics: context });
 
       // Track an event
       await analytics.track("test.event", { foo: "bar" });
@@ -88,7 +88,7 @@ describe("Analytics Source Attribution", () => {
       // This test demonstrates the CURRENT PROBLEM:
       // All events show the same source, even if they come from different plugins
 
-      const _rootContext: AnalyticsContext = {
+      const rootContext: AnalyticsContext = {
         source: {
           product: "@kb-labs/ai-review", // Root package.json
           version: "1.0.0",
@@ -96,7 +96,7 @@ describe("Analytics Source Attribution", () => {
         runId: "test-run-123",
       };
 
-      analytics = createAdapter({ baseDir: testDir });
+      analytics = createAdapter({ baseDir: testDir, analytics: rootContext });
 
       // Simulate Mind plugin tracking event
       await analytics.track("mind.rag-index.started", { scope: "default" });
@@ -139,14 +139,14 @@ describe("Analytics Source Attribution", () => {
 
   describe("Event schema validation", () => {
     it("should create events with kb.v1 schema", async () => {
-      const _context: AnalyticsContext = {
+      const context: AnalyticsContext = {
         source: { product: "test-product", version: "1.0.0" },
         runId: "test-run-123",
         actor: { type: "user", id: "test@example.com", name: "Test User" },
         ctx: { workspace: "/test/workspace", branch: "main" },
       };
 
-      analytics = createAdapter({ baseDir: testDir });
+      analytics = createAdapter({ baseDir: testDir, analytics: context });
       await analytics.track("test.event", { data: "test" });
 
       const files = await readFile(
@@ -178,12 +178,12 @@ describe("Analytics Source Attribution", () => {
 
   describe("getEvents filtering by source", () => {
     it("should filter events by source.product", async () => {
-      const _context: AnalyticsContext = {
+      const context: AnalyticsContext = {
         source: { product: "@kb-labs/mind", version: "0.1.0" },
         runId: "test-run-123",
       };
 
-      analytics = createAdapter({ baseDir: testDir });
+      analytics = createAdapter({ baseDir: testDir, analytics: context });
 
       await analytics.track("mind.event1", {});
       await analytics.track("mind.event2", {});
@@ -200,12 +200,12 @@ describe("Analytics Source Attribution", () => {
     });
 
     it("should return empty when filtering for non-existent source", async () => {
-      const _context: AnalyticsContext = {
+      const context: AnalyticsContext = {
         source: { product: "@kb-labs/mind", version: "0.1.0" },
         runId: "test-run-123",
       };
 
-      analytics = createAdapter({ baseDir: testDir });
+      analytics = createAdapter({ baseDir: testDir, analytics: context });
       await analytics.track("mind.event", {});
 
       // Filter for different source

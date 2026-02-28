@@ -6,6 +6,7 @@ import type {
   ICache,
   AnalyticsContext,
   EventsQuery,
+  StatsQuery,
   EventsResponse,
   EventsStats,
   DailyStats,
@@ -306,143 +307,73 @@ class FileAnalytics implements IAnalytics {
     return stats;
   }
 
-  // eslint-disable-next-line sonarjs/cognitive-complexity -- Complex daily aggregation with grouping by date, type, userId, and sessionId
-  async getDailyStats(query?: EventsQuery): Promise<DailyStats[]> {
-    // First, get filtered events using existing getEvents method
+   
+  async getDailyStats(query?: StatsQuery): Promise<DailyStats[]> {
     const { events } = await this.getEvents(query);
 
-    // Group events by date (YYYY-MM-DD)
-    const eventsByDate = new Map<string, PlatformAnalyticsEvent[]>();
+    const groupBy = query?.groupBy ?? "day";
+    const breakdownBy = query?.breakdownBy;
+    const metricsFilter = query?.metrics;
+
+    // Build date bucket key from event timestamp
+    const getBucketKey = (ts: string): string => {
+      const d = parseISO(ts);
+      switch (groupBy) {
+        case "hour":
+          return format(d, "yyyy-MM-dd'T'HH");
+        case "week":
+          return format(d, "yyyy-'W'II");
+        case "month":
+          return format(d, "yyyy-MM");
+        default:
+          return format(d, "yyyy-MM-dd");
+      }
+    };
+
+    // Read a nested field by dot-notation path from an event object
+    const getFieldValue = (event: PlatformAnalyticsEvent, path: string): string => {
+      const parts = path.split(".");
+      let cur: unknown = event;
+      for (const part of parts) {
+        if (cur === null || cur === undefined || typeof cur !== "object") {return "";}
+        cur = (cur as Record<string, unknown>)[part];
+      }
+      return cur === null || cur === undefined ? "" : String(cur);
+    };
+
+    // Group events by bucket key + optional breakdown value
+    // Map key: `${bucketKey}::${breakdownValue}` (or just bucketKey when no breakdown)
+    const groups = new Map<string, { date: string; breakdown?: string; events: PlatformAnalyticsEvent[] }>();
 
     for (const event of events) {
-      const date = format(parseISO(event.ts), "yyyy-MM-dd");
-      if (!eventsByDate.has(date)) {
-        eventsByDate.set(date, []);
+      const bucketKey = getBucketKey(event.ts);
+      const breakdownValue = breakdownBy ? getFieldValue(event, breakdownBy) : undefined;
+      const groupKey = breakdownValue !== undefined ? `${bucketKey}::${breakdownValue}` : bucketKey;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, { date: bucketKey, breakdown: breakdownValue, events: [] });
       }
-      eventsByDate.get(date)!.push(event);
+      groups.get(groupKey)!.events.push(event);
     }
 
-    // Aggregate metrics for each day
     const dailyStats: DailyStats[] = [];
 
-    for (const [date, dayEvents] of eventsByDate.entries()) {
-      const metrics: Record<string, number> = {};
-
-      // Calculate common metrics based on event type
-      const firstEvent = dayEvents[0];
-      const eventType = firstEvent?.type || "";
-
-      if (eventType.startsWith("llm.")) {
-        // LLM metrics: totalTokens, totalCost, avgDurationMs
-        let totalTokens = 0;
-        let totalCost = 0;
-        let totalDuration = 0;
-
-        for (const event of dayEvents) {
-          const payload = event.payload as any;
-          totalTokens += payload?.totalTokens || 0;
-          totalCost += payload?.estimatedCost || payload?.cost || 0; // Try estimatedCost first (from AnalyticsLLM)
-          totalDuration += payload?.durationMs || 0;
-        }
-
-        metrics.totalTokens = totalTokens;
-        metrics.totalCost = totalCost;
-        metrics.avgDurationMs =
-          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith("embeddings.")) {
-        // Embeddings metrics: totalTokens, totalCost, avgDurationMs
-        let totalTokens = 0;
-        let totalCost = 0;
-        let totalDuration = 0;
-
-        for (const event of dayEvents) {
-          const payload = event.payload as any;
-          totalTokens += payload?.tokens || 0;
-          totalCost += payload?.estimatedCost || payload?.cost || 0; // Try estimatedCost first (from AnalyticsEmbeddings)
-          totalDuration += payload?.durationMs || 0;
-        }
-
-        metrics.totalTokens = totalTokens;
-        metrics.totalCost = totalCost;
-        metrics.avgDurationMs =
-          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith("vectorstore.")) {
-        // VectorStore metrics: operation counts, avgDurationMs
-        let totalSearches = 0;
-        let totalUpserts = 0;
-        let totalDeletes = 0;
-        let totalDuration = 0;
-
-        for (const event of dayEvents) {
-          const payload = event.payload as any;
-          if (event.type.includes("search")) {
-            totalSearches++;
-          }
-          if (event.type.includes("upsert")) {
-            totalUpserts++;
-          }
-          if (event.type.includes("delete")) {
-            totalDeletes++;
-          }
-          totalDuration += payload?.durationMs || 0;
-        }
-
-        metrics.totalSearches = totalSearches;
-        metrics.totalUpserts = totalUpserts;
-        metrics.totalDeletes = totalDeletes;
-        metrics.avgDurationMs =
-          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      } else if (eventType.startsWith("cache.")) {
-        // Cache metrics: hits, misses, sets, hitRate
-        let totalHits = 0;
-        let totalMisses = 0;
-        let totalSets = 0;
-
-        for (const event of dayEvents) {
-          if (event.type === "cache.hit") {
-            totalHits++;
-          }
-          if (event.type === "cache.miss") {
-            totalMisses++;
-          }
-          if (event.type === "cache.set") {
-            totalSets++;
-          }
-        }
-
-        const totalGets = totalHits + totalMisses;
-        metrics.totalHits = totalHits;
-        metrics.totalMisses = totalMisses;
-        metrics.totalSets = totalSets;
-        metrics.hitRate = totalGets > 0 ? (totalHits / totalGets) * 100 : 0;
-      } else if (eventType.startsWith("storage.")) {
-        // Storage metrics: bytesRead, bytesWritten, avgDurationMs
-        let totalBytesRead = 0;
-        let totalBytesWritten = 0;
-        let totalDuration = 0;
-
-        for (const event of dayEvents) {
-          const payload = event.payload as any;
-          totalBytesRead += payload?.bytesRead || 0;
-          totalBytesWritten += payload?.bytesWritten || 0;
-          totalDuration += payload?.durationMs || 0;
-        }
-
-        metrics.totalBytesRead = totalBytesRead;
-        metrics.totalBytesWritten = totalBytesWritten;
-        metrics.avgDurationMs =
-          dayEvents.length > 0 ? totalDuration / dayEvents.length : 0;
-      }
-
-      dailyStats.push({
+    for (const { date, breakdown, events: groupEvents } of groups.values()) {
+      const metrics = this.aggregateMetricsForGroup(groupEvents, metricsFilter);
+      const entry: DailyStats = {
         date,
-        count: dayEvents.length,
+        count: groupEvents.length,
         metrics: Object.keys(metrics).length > 0 ? metrics : undefined,
-      });
+      };
+      if (breakdown !== undefined) {entry.breakdown = breakdown;}
+      dailyStats.push(entry);
     }
 
-    // Sort by date ascending
-    dailyStats.sort((a, b) => a.date.localeCompare(b.date));
+    dailyStats.sort((a, b) => {
+      const dateCmp = a.date.localeCompare(b.date);
+      if (dateCmp !== 0) {return dateCmp;}
+      return (a.breakdown ?? "").localeCompare(b.breakdown ?? "");
+    });
 
     return dailyStats;
   }
@@ -464,12 +395,12 @@ class FileAnalytics implements IAnalytics {
 
       for (const file of jsonlFiles) {
         const filePath = join(this.baseDir, file);
-        // eslint-disable-next-line no-await-in-loop -- Reading file stats sequentially for metadata collection
+         
         const stats = await fs.stat(filePath);
         totalSize += stats.size;
 
         // Read first and last line to get timestamps
-        // eslint-disable-next-line no-await-in-loop -- Reading file content sequentially for timestamp extraction
+         
         const content = await fs.readFile(filePath, "utf-8");
         const lines = content
           .trim()
@@ -516,6 +447,201 @@ class FileAnalytics implements IAnalytics {
   // Private Methods
   // ========================================
 
+  private shouldIncludeMetric(metricsFilter: string[] | undefined, key: string): boolean {
+    return !metricsFilter || metricsFilter.includes(key);
+  }
+
+  private readNumeric(payload: unknown, key: string): number {
+    const value = (payload as Record<string, unknown> | undefined)?.[key];
+    return typeof value === "number" ? value : 0;
+  }
+
+  private aggregateLlmMetrics(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    let totalTokens = 0;
+    let totalCost = 0;
+    let totalDuration = 0;
+
+    for (const event of groupEvents) {
+      totalTokens += this.readNumeric(event.payload, "totalTokens");
+      const estimatedCost = this.readNumeric(event.payload, "estimatedCost");
+      totalCost += estimatedCost || this.readNumeric(event.payload, "cost");
+      totalDuration += this.readNumeric(event.payload, "durationMs");
+    }
+
+    const metrics: Record<string, number> = {};
+    if (this.shouldIncludeMetric(metricsFilter, "totalTokens")) {
+      metrics.totalTokens = totalTokens;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalCost")) {
+      metrics.totalCost = totalCost;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "avgDurationMs")) {
+      metrics.avgDurationMs =
+        groupEvents.length > 0 ? totalDuration / groupEvents.length : 0;
+    }
+    return metrics;
+  }
+
+  private aggregateEmbeddingsMetrics(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    let totalTokens = 0;
+    let totalCost = 0;
+    let totalDuration = 0;
+
+    for (const event of groupEvents) {
+      totalTokens += this.readNumeric(event.payload, "tokens");
+      const estimatedCost = this.readNumeric(event.payload, "estimatedCost");
+      totalCost += estimatedCost || this.readNumeric(event.payload, "cost");
+      totalDuration += this.readNumeric(event.payload, "durationMs");
+    }
+
+    const metrics: Record<string, number> = {};
+    if (this.shouldIncludeMetric(metricsFilter, "totalTokens")) {
+      metrics.totalTokens = totalTokens;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalCost")) {
+      metrics.totalCost = totalCost;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "avgDurationMs")) {
+      metrics.avgDurationMs =
+        groupEvents.length > 0 ? totalDuration / groupEvents.length : 0;
+    }
+    return metrics;
+  }
+
+  private aggregateVectorstoreMetrics(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    let totalSearches = 0;
+    let totalUpserts = 0;
+    let totalDeletes = 0;
+    let totalDuration = 0;
+
+    for (const event of groupEvents) {
+      if (event.type.includes("search")) {
+        totalSearches++;
+      }
+      if (event.type.includes("upsert")) {
+        totalUpserts++;
+      }
+      if (event.type.includes("delete")) {
+        totalDeletes++;
+      }
+      totalDuration += this.readNumeric(event.payload, "durationMs");
+    }
+
+    const metrics: Record<string, number> = {};
+    if (this.shouldIncludeMetric(metricsFilter, "totalSearches")) {
+      metrics.totalSearches = totalSearches;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalUpserts")) {
+      metrics.totalUpserts = totalUpserts;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalDeletes")) {
+      metrics.totalDeletes = totalDeletes;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "avgDurationMs")) {
+      metrics.avgDurationMs =
+        groupEvents.length > 0 ? totalDuration / groupEvents.length : 0;
+    }
+    return metrics;
+  }
+
+  private aggregateCacheMetrics(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    let totalHits = 0;
+    let totalMisses = 0;
+    let totalSets = 0;
+
+    for (const event of groupEvents) {
+      if (event.type === "cache.hit") {
+        totalHits++;
+      }
+      if (event.type === "cache.miss") {
+        totalMisses++;
+      }
+      if (event.type === "cache.set") {
+        totalSets++;
+      }
+    }
+
+    const totalGets = totalHits + totalMisses;
+    const metrics: Record<string, number> = {};
+    if (this.shouldIncludeMetric(metricsFilter, "totalHits")) {
+      metrics.totalHits = totalHits;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalMisses")) {
+      metrics.totalMisses = totalMisses;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalSets")) {
+      metrics.totalSets = totalSets;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "hitRate")) {
+      metrics.hitRate = totalGets > 0 ? (totalHits / totalGets) * 100 : 0;
+    }
+    return metrics;
+  }
+
+  private aggregateStorageMetrics(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    let totalBytesRead = 0;
+    let totalBytesWritten = 0;
+    let totalDuration = 0;
+
+    for (const event of groupEvents) {
+      totalBytesRead += this.readNumeric(event.payload, "bytesRead");
+      totalBytesWritten += this.readNumeric(event.payload, "bytesWritten");
+      totalDuration += this.readNumeric(event.payload, "durationMs");
+    }
+
+    const metrics: Record<string, number> = {};
+    if (this.shouldIncludeMetric(metricsFilter, "totalBytesRead")) {
+      metrics.totalBytesRead = totalBytesRead;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "totalBytesWritten")) {
+      metrics.totalBytesWritten = totalBytesWritten;
+    }
+    if (this.shouldIncludeMetric(metricsFilter, "avgDurationMs")) {
+      metrics.avgDurationMs =
+        groupEvents.length > 0 ? totalDuration / groupEvents.length : 0;
+    }
+    return metrics;
+  }
+
+  private aggregateMetricsForGroup(
+    groupEvents: PlatformAnalyticsEvent[],
+    metricsFilter?: string[],
+  ): Record<string, number> {
+    const firstType = groupEvents[0]?.type ?? "";
+
+    if (firstType.startsWith("llm.")) {
+      return this.aggregateLlmMetrics(groupEvents, metricsFilter);
+    }
+    if (firstType.startsWith("embeddings.")) {
+      return this.aggregateEmbeddingsMetrics(groupEvents, metricsFilter);
+    }
+    if (firstType.startsWith("vectorstore.")) {
+      return this.aggregateVectorstoreMetrics(groupEvents, metricsFilter);
+    }
+    if (firstType.startsWith("cache.")) {
+      return this.aggregateCacheMetrics(groupEvents, metricsFilter);
+    }
+    if (firstType.startsWith("storage.")) {
+      return this.aggregateStorageMetrics(groupEvents, metricsFilter);
+    }
+    return {};
+  }
+
   /**
    * Write V1 event directly to file (new format)
    */
@@ -544,7 +670,7 @@ class FileAnalytics implements IAnalytics {
 
       for (const file of jsonlFiles) {
         const filePath = join(this.baseDir, file);
-        // eslint-disable-next-line no-await-in-loop -- Loading all events from files sequentially
+         
         const content = await fs.readFile(filePath, "utf-8");
         const lines = content
           .trim()
@@ -663,18 +789,42 @@ class FileAnalytics implements IAnalytics {
   }
 }
 
+function isAnalyticsContext(value: unknown): value is AnalyticsContext {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const source = (value as { source?: unknown }).source;
+  if (!source || typeof source !== "object") {
+    return false;
+  }
+  const product = (source as { product?: unknown }).product;
+  const version = (source as { version?: unknown }).version;
+  return typeof product === "string" && typeof version === "string";
+}
+
 export function createAdapter(
   options?: FileAnalyticsOptions,
-  deps?: Record<string, unknown>,
+  depsOrContext?: Record<string, unknown> | AnalyticsContext,
 ): IAnalytics {
-  // Extract cache from deps if provided (optional dependency)
+  const deps =
+    depsOrContext && !isAnalyticsContext(depsOrContext)
+      ? depsOrContext
+      : undefined;
   const cache = deps?.cache as ICache | undefined;
 
-  // AnalyticsContext is created by core-runtime and stored in global platform
-  // We don't receive it through deps anymore since context fields were removed
-  // FileAnalytics will use options.cwd (passed by loader) to determine baseDir
-  // and create fallback context for event enrichment
-  return new FileAnalytics(options, undefined, cache);
+  const legacyContext = isAnalyticsContext(depsOrContext)
+    ? depsOrContext
+    : undefined;
+  const injectedContext = isAnalyticsContext(deps?.analytics)
+    ? deps.analytics
+    : isAnalyticsContext(deps?.context)
+      ? deps.context
+      : undefined;
+
+  const context = options?.analytics ?? injectedContext ?? legacyContext;
+  const adapterOptions = context ? { ...options, analytics: context } : options;
+
+  return new FileAnalytics(adapterOptions, context, cache);
 }
 
 export default createAdapter;

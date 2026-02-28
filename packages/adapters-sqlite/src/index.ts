@@ -218,7 +218,7 @@ export class SQLiteAdapter implements ISQLDatabase {
    */
   private checkClosed(): void {
     if (this.closed) {
-      throw new Error("Database connection is closed");
+      throw new Error("Database is closed");
     }
   }
 

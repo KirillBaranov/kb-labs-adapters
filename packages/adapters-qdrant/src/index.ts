@@ -233,7 +233,7 @@ export class QdrantVectorStore implements IVectorStore {
 
       // Wait for this group of concurrent batches to complete
       try {
-        // eslint-disable-next-line no-await-in-loop -- Adaptive concurrency control: must wait for batch group before processing next
+         
         await Promise.all(batchPromises);
         batchIndex += batchGroup.length;
       } catch (_error) {

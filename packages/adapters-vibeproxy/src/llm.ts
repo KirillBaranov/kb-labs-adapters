@@ -13,6 +13,8 @@ import type {
   LLMToolCallResponse,
   LLMTool,
   LLMToolCall,
+  LLMProtocolCapabilities,
+  LLMExecutionPolicy,
 } from "@kb-labs/core-platform";
 
 /**
@@ -103,10 +105,26 @@ export class VibeProxyLLM implements ILLM {
     this.timeout = config.timeout ?? 120000;
   }
 
+  getProtocolCapabilities(): LLMProtocolCapabilities {
+    return {
+      cache: {
+        supported: true,
+        protocol: "explicit_handle",
+        scopes: ["prefix", "segments", "full_request"],
+      },
+      // Current implementation yields complete() as one chunk (not true streaming)
+      stream: { supported: false },
+    };
+  }
+
   /**
    * Make a request to VibeProxy.
    */
-  private async request<T>(endpoint: string, body: unknown): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    body: unknown,
+    headers?: Record<string, string>,
+  ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -116,6 +134,7 @@ export class VibeProxyLLM implements ILLM {
         headers: {
           "Content-Type": "application/json",
           "x-api-key": this.apiKey,
+          ...headers,
         },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -136,6 +155,150 @@ export class VibeProxyLLM implements ILLM {
     } finally {
       clearTimeout(timeoutId);
     }
+  }
+
+  private buildExecutionHeaders(execution?: LLMExecutionPolicy): Record<string, string> {
+    const headers: Record<string, string> = {};
+    const cache = execution?.cache;
+    if (!cache) {
+      return headers;
+    }
+
+    headers["x-kb-cache-mode"] = cache.mode ?? "prefer";
+    if (cache.scope) {
+      headers["x-kb-cache-scope"] = cache.scope;
+    }
+    if (typeof cache.ttlSec === "number") {
+      headers["x-kb-cache-ttl-sec"] = String(cache.ttlSec);
+    }
+    if (cache.key) {
+      headers["x-kb-cache-key"] = cache.key;
+    }
+
+    return headers;
+  }
+
+  private buildTraceHeaders(options?: LLMOptions): Record<string, string> {
+    const trace = options?.metadata?.cacheDecisionTrace;
+    if (!trace) {
+      return {};
+    }
+    return {
+      "x-kb-cache-decision": JSON.stringify(trace),
+    };
+  }
+
+  private extractTextContent(response: VibeProxyMessagesResponse): string {
+    return response.content
+      .filter((c): c is { type: "text"; text: string } => c.type === "text")
+      .map((c) => c.text)
+      .join("");
+  }
+
+  private convertMessagesForTools(
+    messages: LLMMessage[],
+  ): {
+    messages: VibeProxyMessagesRequest["messages"];
+    systemPrompt?: string;
+  } {
+    const vibeProxyMessages: VibeProxyMessagesRequest["messages"] = [];
+    let systemPrompt: string | undefined;
+
+    for (const msg of messages) {
+      if (msg.role === "system") {
+        systemPrompt = msg.content;
+        continue;
+      }
+      if (msg.role === "tool") {
+        vibeProxyMessages.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: msg.toolCallId || "",
+              content: msg.content,
+            },
+          ],
+        });
+        continue;
+      }
+      if (msg.role === "assistant" && msg.toolCalls && msg.toolCalls.length > 0) {
+        vibeProxyMessages.push({
+          role: "assistant",
+          content: this.toAssistantToolContent(msg),
+        });
+        continue;
+      }
+      vibeProxyMessages.push({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      });
+    }
+
+    return { messages: vibeProxyMessages, systemPrompt };
+  }
+
+  private toAssistantToolContent(
+    message: LLMMessage,
+  ): Array<
+    | { type: "text"; text: string }
+    | { type: "tool_use"; id: string; name: string; input: unknown }
+  > {
+    const contentBlocks: Array<
+      | { type: "text"; text: string }
+      | { type: "tool_use"; id: string; name: string; input: unknown }
+    > = [];
+
+    if (message.content && message.content.trim()) {
+      contentBlocks.push({
+        type: "text",
+        text: message.content,
+      });
+    }
+
+    for (const toolCall of message.toolCalls ?? []) {
+      contentBlocks.push({
+        type: "tool_use",
+        id: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.input,
+      });
+    }
+    return contentBlocks;
+  }
+
+  private buildToolChoice(
+    toolChoice: LLMToolCallOptions["toolChoice"],
+  ): VibeProxyMessagesRequest["tool_choice"] {
+    if (toolChoice === "auto") {
+      return { type: "auto" };
+    }
+    if (toolChoice === "required") {
+      return { type: "any" };
+    }
+    if (toolChoice && typeof toolChoice === "object") {
+      return { type: "tool", name: toolChoice.function.name };
+    }
+    return undefined;
+  }
+
+  private extractToolCalls(response: VibeProxyMessagesResponse): LLMToolCall[] {
+    return response.content
+      .filter(
+        (
+          c,
+        ): c is {
+          type: "tool_use";
+          id: string;
+          name: string;
+          input: unknown;
+        } => c.type === "tool_use",
+      )
+      .map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        input: tc.input,
+      }));
   }
 
   async complete(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
@@ -160,18 +323,22 @@ export class VibeProxyLLM implements ILLM {
     const response = await this.request<VibeProxyMessagesResponse>(
       "/v1/messages",
       requestBody,
+      {
+        ...this.buildExecutionHeaders(options?.execution),
+        ...this.buildTraceHeaders(options),
+      },
     );
 
-    const textContent = response.content
-      .filter((c): c is { type: "text"; text: string } => c.type === "text")
-      .map((c) => c.text)
-      .join("");
-
     return {
-      content: textContent,
+      content: this.extractTextContent(response),
       usage: {
         promptTokens: response.usage.input_tokens,
         completionTokens: response.usage.output_tokens,
+        cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
+        providerUsage: {
+          stopReason: response.stop_reason,
+        },
       },
       model: response.model,
     };
@@ -192,37 +359,7 @@ export class VibeProxyLLM implements ILLM {
     options: LLMToolCallOptions,
   ): Promise<LLMToolCallResponse> {
     const model = options?.model ?? this.defaultModel;
-
-    // Convert LLMMessage[] to VibeProxy format
-    const vibeProxyMessages: VibeProxyMessagesRequest["messages"] = [];
-    let systemPrompt: string | undefined;
-
-    for (const msg of messages) {
-      if (msg.role === "system") {
-        systemPrompt = msg.content;
-        continue;
-      }
-
-      if (msg.role === "tool") {
-        // Tool results go in user message
-        vibeProxyMessages.push({
-          role: "user",
-          content: [
-            {
-              type: "tool_result",
-              tool_use_id: msg.toolCallId || "",
-              content: msg.content,
-            },
-          ],
-        });
-        continue;
-      }
-
-      vibeProxyMessages.push({
-        role: msg.role as "user" | "assistant",
-        content: msg.content,
-      });
-    }
+    const converted = this.convertMessagesForTools(messages);
 
     // Convert LLMTool[] to VibeProxy tools format
     const tools: VibeProxyMessagesRequest["tools"] = options.tools.map(
@@ -232,28 +369,18 @@ export class VibeProxyLLM implements ILLM {
         input_schema: tool.inputSchema,
       }),
     );
-
-    // Convert tool choice
-    let tool_choice: VibeProxyMessagesRequest["tool_choice"];
-    if (options.toolChoice === "auto") {
-      tool_choice = { type: "auto" };
-    } else if (options.toolChoice === "required") {
-      tool_choice = { type: "any" };
-    } else if (options.toolChoice && typeof options.toolChoice === "object") {
-      tool_choice = { type: "tool", name: options.toolChoice.function.name };
-    }
-    // 'none' - don't send tools at all
+    const toolChoice = this.buildToolChoice(options.toolChoice);
 
     const requestBody: VibeProxyMessagesRequest = {
       model,
       max_tokens: options?.maxTokens ?? 4096,
-      messages: vibeProxyMessages,
+      messages: converted.messages,
       tools: options.toolChoice !== "none" ? tools : undefined,
-      tool_choice: options.toolChoice !== "none" ? tool_choice : undefined,
+      tool_choice: options.toolChoice !== "none" ? toolChoice : undefined,
     };
 
-    if (systemPrompt || options?.systemPrompt) {
-      requestBody.system = systemPrompt ?? options.systemPrompt;
+    if (converted.systemPrompt || options?.systemPrompt) {
+      requestBody.system = converted.systemPrompt ?? options.systemPrompt;
     }
     if (options?.temperature !== undefined) {
       requestBody.temperature = options.temperature;
@@ -265,37 +392,24 @@ export class VibeProxyLLM implements ILLM {
     const response = await this.request<VibeProxyMessagesResponse>(
       "/v1/messages",
       requestBody,
+      {
+        ...this.buildExecutionHeaders(options?.execution),
+        ...this.buildTraceHeaders(options),
+      },
     );
-
-    // Extract text content
-    const textContent = response.content
-      .filter((c): c is { type: "text"; text: string } => c.type === "text")
-      .map((c) => c.text)
-      .join("");
-
-    // Extract tool calls
-    const toolCalls: LLMToolCall[] = response.content
-      .filter(
-        (
-          c,
-        ): c is {
-          type: "tool_use";
-          id: string;
-          name: string;
-          input: unknown;
-        } => c.type === "tool_use",
-      )
-      .map((tc) => ({
-        id: tc.id,
-        name: tc.name,
-        input: tc.input,
-      }));
+    const textContent = this.extractTextContent(response);
+    const toolCalls = this.extractToolCalls(response);
 
     return {
       content: textContent,
       usage: {
         promptTokens: response.usage.input_tokens,
         completionTokens: response.usage.output_tokens,
+        cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+        cacheWriteTokens: response.usage.cache_creation_input_tokens ?? 0,
+        providerUsage: {
+          stopReason: response.stop_reason,
+        },
       },
       model: response.model,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,

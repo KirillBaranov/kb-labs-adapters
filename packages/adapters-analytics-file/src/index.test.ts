@@ -31,7 +31,7 @@ describe("FileAnalytics - Manifest-based Context Injection", () => {
         fs.readdir(testDir),
       );
       for (const file of files) {
-        // eslint-disable-next-line no-await-in-loop -- Test cleanup: removing files sequentially
+         
         await unlink(path.join(testDir, file));
       }
     } catch {

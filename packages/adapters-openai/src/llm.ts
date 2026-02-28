@@ -13,6 +13,7 @@ import type {
   LLMToolCallResponse,
   LLMTool,
   LLMToolCall,
+  LLMProtocolCapabilities,
 } from "@kb-labs/core-platform";
 
 /**
@@ -45,6 +46,47 @@ export class OpenAILLM implements ILLM {
     this.defaultModel = config.defaultModel ?? "gpt-4o-mini";
   }
 
+  getProtocolCapabilities(): LLMProtocolCapabilities {
+    return {
+      cache: {
+        supported: true,
+        protocol: "auto_prefix",
+        scopes: ["prefix", "segments"],
+      },
+      stream: {
+        supported: true,
+      },
+    };
+  }
+
+  private buildCacheRequestPatch(options?: LLMOptions): Record<string, unknown> {
+    const cache = options?.execution?.cache;
+    if (!cache) {
+      return {};
+    }
+
+    const patch: Record<string, unknown> = {
+      metadata: {
+        kb_cache_mode: cache.mode ?? "prefer",
+        kb_cache_scope: cache.scope ?? "prefix",
+      },
+    };
+
+    if (typeof cache.ttlSec === "number") {
+      (patch.metadata as Record<string, unknown>).kb_cache_ttl_sec = String(
+        cache.ttlSec,
+      );
+    }
+
+    if (cache.key) {
+      // Best-effort hint: supported by newer OpenAI prompt caching stacks.
+      patch.prompt_cache_key = cache.key;
+      (patch.metadata as Record<string, unknown>).kb_cache_key = cache.key;
+    }
+
+    return patch;
+  }
+
   async complete(prompt: string, options?: LLMOptions): Promise<LLMResponse> {
     const model = options?.model ?? this.defaultModel;
     const messages: OpenAI.ChatCompletionMessageParam[] = [];
@@ -63,6 +105,7 @@ export class OpenAILLM implements ILLM {
       temperature: options?.temperature,
       max_tokens: options?.maxTokens,
       stop: options?.stop,
+      ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
     });
 
     const choice = response.choices[0];
@@ -73,6 +116,10 @@ export class OpenAILLM implements ILLM {
       usage: {
         promptTokens: response.usage?.prompt_tokens ?? 0,
         completionTokens: response.usage?.completion_tokens ?? 0,
+        cacheReadTokens:
+          (response.usage as unknown as { prompt_tokens_details?: { cached_tokens?: number } })
+            ?.prompt_tokens_details?.cached_tokens ?? 0,
+        providerUsage: response.usage as unknown as Record<string, unknown>,
       },
       model: response.model,
     };
@@ -97,6 +144,7 @@ export class OpenAILLM implements ILLM {
       max_tokens: options?.maxTokens,
       stop: options?.stop,
       stream: true,
+      ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
     });
 
     for await (const chunk of stream) {
@@ -186,6 +234,7 @@ export class OpenAILLM implements ILLM {
       temperature: options?.temperature,
       max_tokens: options?.maxTokens,
       stop: options?.stop,
+      ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
     });
 
     const choice = response.choices[0];
@@ -217,6 +266,10 @@ export class OpenAILLM implements ILLM {
       usage: {
         promptTokens: response.usage?.prompt_tokens ?? 0,
         completionTokens: response.usage?.completion_tokens ?? 0,
+        cacheReadTokens:
+          (response.usage as unknown as { prompt_tokens_details?: { cached_tokens?: number } })
+            ?.prompt_tokens_details?.cached_tokens ?? 0,
+        providerUsage: response.usage as unknown as Record<string, unknown>,
       },
       model: response.model,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,

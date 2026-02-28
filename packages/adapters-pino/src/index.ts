@@ -60,6 +60,7 @@ export class PinoLoggerAdapter implements ILogger {
   private pino: PinoLoggerInstance;
   private logBuffer?: LogRingBuffer;
   private logCallbacks = new Set<(record: LogRecord) => void>();
+  private bindings: Record<string, unknown> = {};
 
   constructor(config: PinoLoggerConfig = {}) {
     // Resolve log level with priority: ENV var > config.level > 'info'
@@ -122,17 +123,26 @@ export class PinoLoggerAdapter implements ILogger {
   /**
    * Internal constructor for child loggers.
    */
-  private constructor_child(pinoInstance: PinoLoggerInstance) {
+  private constructor_child(pinoInstance: PinoLoggerInstance, bindings: Record<string, unknown>) {
     const instance = Object.create(PinoLoggerAdapter.prototype);
     instance.pino = pinoInstance;
     instance.logCallbacks = this.logCallbacks; // Share callbacks with parent
     instance.logBuffer = this.logBuffer; // Share buffer with parent
+    instance.bindings = bindings;
     return instance;
+  }
+
+  private mergeBindings(meta?: Record<string, unknown>): Record<string, unknown> {
+    if (!meta) {
+      return { ...this.bindings };
+    }
+    return { ...this.bindings, ...meta };
   }
 
   info(message: string, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     this.pino.info(meta ?? {}, message);
 
@@ -141,8 +151,8 @@ export class PinoLoggerAdapter implements ILogger {
       timestamp,
       level: "info",
       message,
-      fields: meta ?? {},
-      source: (meta?.source as string) ?? "unknown",
+      fields: mergedMeta,
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -152,6 +162,7 @@ export class PinoLoggerAdapter implements ILogger {
   warn(message: string, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     this.pino.warn(meta ?? {}, message);
 
@@ -160,8 +171,8 @@ export class PinoLoggerAdapter implements ILogger {
       timestamp,
       level: "warn",
       message,
-      fields: meta ?? {},
-      source: (meta?.source as string) ?? "unknown",
+      fields: mergedMeta,
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -171,9 +182,10 @@ export class PinoLoggerAdapter implements ILogger {
   error(message: string, error?: Error, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     const enrichedMeta = {
-      ...meta,
+      ...mergedMeta,
       ...(error && {
         error: {
           message: error.message,
@@ -191,7 +203,7 @@ export class PinoLoggerAdapter implements ILogger {
       level: "error",
       message,
       fields: enrichedMeta,
-      source: (meta?.source as string) ?? "unknown",
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -201,9 +213,10 @@ export class PinoLoggerAdapter implements ILogger {
   fatal(message: string, error?: Error, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     const enrichedMeta = {
-      ...meta,
+      ...mergedMeta,
       ...(error && {
         error: {
           message: error.message,
@@ -221,7 +234,7 @@ export class PinoLoggerAdapter implements ILogger {
       level: "fatal",
       message,
       fields: enrichedMeta,
-      source: (meta?.source as string) ?? "unknown",
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -231,6 +244,7 @@ export class PinoLoggerAdapter implements ILogger {
   debug(message: string, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     this.pino.debug(meta ?? {}, message);
 
@@ -239,8 +253,8 @@ export class PinoLoggerAdapter implements ILogger {
       timestamp,
       level: "debug",
       message,
-      fields: meta ?? {},
-      source: (meta?.source as string) ?? "unknown",
+      fields: mergedMeta,
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -250,6 +264,7 @@ export class PinoLoggerAdapter implements ILogger {
   trace(message: string, meta?: Record<string, unknown>): void {
     const logId = generateLogId();
     const timestamp = Date.now();
+    const mergedMeta = this.mergeBindings(meta);
 
     this.pino.trace(meta ?? {}, message);
 
@@ -258,8 +273,8 @@ export class PinoLoggerAdapter implements ILogger {
       timestamp,
       level: "trace",
       message,
-      fields: meta ?? {},
-      source: (meta?.source as string) ?? "unknown",
+      fields: mergedMeta,
+      source: (mergedMeta.source as string) ?? "unknown",
     };
 
     this.logBuffer?.append(record);
@@ -267,8 +282,9 @@ export class PinoLoggerAdapter implements ILogger {
   }
 
   child(bindings: Record<string, unknown>): ILogger {
+    const mergedBindings = { ...this.bindings, ...bindings };
     const childPino = this.pino.child(bindings);
-    return this.constructor_child(childPino);
+    return this.constructor_child(childPino, mergedBindings);
   }
 
   /**

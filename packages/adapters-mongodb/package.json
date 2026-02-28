@@ -37,7 +37,7 @@
     "@kb-labs/core-platform": "*"
   },
   "devDependencies": {
-    "@kb-labs/core-platform": "link:../../../kb-labs-core/packages/core-platform",
+    "@kb-labs/core-platform": "^1.0.0",
     "@types/node": "^24.3.3",
     "eslint": "^9",
     "tsup": "^8.5.0",

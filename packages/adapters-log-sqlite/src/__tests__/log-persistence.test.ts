@@ -430,6 +430,37 @@ describe("LogSQLitePersistence", () => {
       expect(page2.logs).toHaveLength(1);
       expect(page1.logs[0]!.id).not.toBe(page2.logs[0]!.id);
     });
+
+    it("should fallback to phrase search for hyphenated plain text", async () => {
+      await persistence.write({
+        id: "test-search-hyphen",
+        timestamp: 5000,
+        level: "info",
+        message: "kb-labs-commit-plugin initialized",
+        fields: {},
+        source: "commit",
+      });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 150);
+      });
+
+      const result = await persistence.search("kb-labs-commit-plugin");
+      expect(result.logs).toHaveLength(1);
+      expect(result.logs[0]!.id).toBe("test-search-hyphen");
+    });
+
+    it("should auto-rebuild stale FTS index when count and rows diverge", async () => {
+      // Insert stale index row with non-existent content rowid.
+      await db.query(
+        "INSERT INTO logs_fts(rowid, message) VALUES (?, ?)",
+        [999999, "phase 3 stale marker"],
+      );
+
+      const result = await persistence.search("phase 3 stale marker");
+      expect(result.logs).toHaveLength(0);
+      expect(result.total).toBe(0);
+      expect(result.hasMore).toBe(false);
+    });
   });
 
   describe("deleteOlderThan", () => {

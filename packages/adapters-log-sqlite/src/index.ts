@@ -116,6 +116,7 @@ export class LogSQLitePersistence implements ILogPersistence {
   private shuttingDown = false;
   private closed = false;
   private closedWarningLogged = false;
+  private ftsRebuildInProgress = false;
 
   // Retention policy
   private retentionMaxAge: number;
@@ -389,50 +390,82 @@ export class LogSQLitePersistence implements ILogPersistence {
     const limit = options.limit ?? 100;
     const offset = options.offset ?? 0;
 
-    // Count total matches
-    const countQuery = `
-      SELECT COUNT(*) as count
-      FROM logs_fts
-      WHERE logs_fts MATCH ?
-    `;
-    const countResult = await this.db.query<{ count: number }>(countQuery, [
-      searchText,
-    ]);
-    const total = countResult.rows[0]?.count ?? 0;
+    const runSearch = async (queryText: string): Promise<{
+      logs: LogRecord[];
+      total: number;
+      hasMore: boolean;
+    }> => {
+      // Count total matches
+      const countQuery = `
+        SELECT COUNT(*) as count
+        FROM logs_fts
+        WHERE logs_fts MATCH ?
+      `;
+      const countResult = await this.db.query<{ count: number }>(countQuery, [
+        queryText,
+      ]);
+      const total = countResult.rows[0]?.count ?? 0;
 
-    // Get matching logs
-    const searchQuery = `
-      SELECT logs.id, logs.timestamp, logs.level, logs.message, logs.source, logs.fields
-      FROM logs_fts
-      INNER JOIN logs ON logs.rowid = logs_fts.rowid
-      WHERE logs_fts MATCH ?
-      ORDER BY logs.timestamp DESC
-      LIMIT ? OFFSET ?
-    `;
+      // Get matching logs
+      const searchQuery = `
+        SELECT logs.id, logs.timestamp, logs.level, logs.message, logs.source, logs.fields
+        FROM logs_fts
+        INNER JOIN logs ON logs.rowid = logs_fts.rowid
+        WHERE logs_fts MATCH ?
+        ORDER BY logs.timestamp DESC
+        LIMIT ? OFFSET ?
+      `;
 
-    const searchResult = await this.db.query<{
-      id: string;
-      timestamp: number;
-      level: string;
-      message: string;
-      source: string;
-      fields: string | null;
-    }>(searchQuery, [searchText, limit, offset]);
+      const searchResult = await this.db.query<{
+        id: string;
+        timestamp: number;
+        level: string;
+        message: string;
+        source: string;
+        fields: string | null;
+      }>(searchQuery, [queryText, limit, offset]);
 
-    const logs: LogRecord[] = searchResult.rows.map((row) => ({
-      id: row.id,
-      timestamp: row.timestamp,
-      level: row.level as LogRecord["level"],
-      message: row.message,
-      source: row.source,
-      fields: row.fields ? JSON.parse(row.fields) : {},
-    }));
+      const logs: LogRecord[] = searchResult.rows.map((row) => ({
+        id: row.id,
+        timestamp: row.timestamp,
+        level: row.level as LogRecord["level"],
+        message: row.message,
+        source: row.source,
+        fields: row.fields ? JSON.parse(row.fields) : {},
+      }));
 
-    return {
-      logs,
-      total,
-      hasMore: offset + logs.length < total,
+      return {
+        logs,
+        total,
+        hasMore: offset + logs.length < total,
+      };
     };
+
+    const searchWithRepair = async (queryText: string): Promise<{
+      logs: LogRecord[];
+      total: number;
+      hasMore: boolean;
+    }> => {
+      const initial = await runSearch(queryText);
+      // Index drift symptom: MATCH count exists but JOIN returns no rows.
+      if (initial.total > 0 && initial.logs.length === 0) {
+        await this.rebuildFtsIndex();
+        return runSearch(queryText);
+      }
+      return initial;
+    };
+
+    try {
+      return await searchWithRepair(searchText);
+    } catch (error) {
+      // Common UX case: plain text with '-' (e.g. kb-labs) is parsed as FTS syntax.
+      // Retry as exact phrase to preserve user-friendly behavior.
+      if (this.isFtsSyntaxError(error)) {
+        const escapedPhrase = `"${searchText.replace(/"/g, '""')}"`;
+        return searchWithRepair(escapedPhrase);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -726,9 +759,33 @@ export class LogSQLitePersistence implements ILogPersistence {
     const msg = error instanceof Error ? error.message : String(error);
     const normalized = msg.toLowerCase();
     return (
+      normalized.includes("database is closed") ||
       normalized.includes("database connection is closed") ||
       normalized.includes("connection is closed")
     );
+  }
+
+  private isFtsSyntaxError(error: unknown): boolean {
+    const msg = this.getErrorMessage(error).toLowerCase();
+    return (
+      msg.includes("no such column") ||
+      msg.includes("fts5: syntax error") ||
+      msg.includes("malformed match expression")
+    );
+  }
+
+  private async rebuildFtsIndex(): Promise<void> {
+    if (this.ftsRebuildInProgress) {
+      return;
+    }
+    this.ftsRebuildInProgress = true;
+    try {
+      await this.db.query(`INSERT INTO logs_fts(logs_fts) VALUES('rebuild')`);
+    } catch (error) {
+      console.warn("[LogSQLitePersistence] Failed to rebuild FTS index:", error);
+    } finally {
+      this.ftsRebuildInProgress = false;
+    }
   }
 
   private computeRetryDelayMs(attempt: number): number {

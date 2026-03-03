@@ -29,14 +29,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS logs_fts USING fts5(
 );
 
 -- Triggers to keep FTS in sync with logs table
+DROP TRIGGER IF EXISTS logs_fts_insert;
 CREATE TRIGGER IF NOT EXISTS logs_fts_insert AFTER INSERT ON logs BEGIN
   INSERT INTO logs_fts(rowid, message) VALUES (new.rowid, new.message);
 END;
 
+DROP TRIGGER IF EXISTS logs_fts_delete;
 CREATE TRIGGER IF NOT EXISTS logs_fts_delete AFTER DELETE ON logs BEGIN
-  DELETE FROM logs_fts WHERE rowid = old.rowid;
+  INSERT INTO logs_fts(logs_fts, rowid, message) VALUES('delete', old.rowid, old.message);
 END;
 
+DROP TRIGGER IF EXISTS logs_fts_update;
 CREATE TRIGGER IF NOT EXISTS logs_fts_update AFTER UPDATE ON logs BEGIN
-  UPDATE logs_fts SET message = new.message WHERE rowid = new.rowid;
+  INSERT INTO logs_fts(logs_fts, rowid, message) VALUES('delete', old.rowid, old.message);
+  INSERT INTO logs_fts(rowid, message) VALUES (new.rowid, new.message);
 END;

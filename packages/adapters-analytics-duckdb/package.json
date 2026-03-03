@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.4.4-r.1",
-    "@kb-labs/core-platform": "^1.0.0"
+    "@kb-labs/core-platform": "^1.2.0"
   },
   "devDependencies": {
     "@kb-labs/devkit": "link:../../../kb-labs-devkit",

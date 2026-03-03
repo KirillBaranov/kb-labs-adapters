@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.8.0",
-    "@kb-labs/core-platform": "^1.0.0"
+    "@kb-labs/core-platform": "^1.2.0"
   },
   "devDependencies": {
     "@kb-labs/devkit": "link:../../../kb-labs-devkit",

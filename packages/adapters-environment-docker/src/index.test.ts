@@ -62,10 +62,28 @@ describe('DockerEnvironmentAdapter', () => {
     expect(status.reason).toBe('running');
   });
 
-  it('uses keep-alive default command when request command is omitted', async () => {
+  it('uses runtimeCommand when request command is omitted', async () => {
     const execDocker = vi.fn(async (args: string[]) => {
       if (args[0] === 'run') {
         return 'container-keepalive\n';
+      }
+      throw new Error(`Unexpected command: ${args.join(' ')}`);
+    });
+
+    const adapter = new DockerEnvironmentAdapter({
+      execDocker,
+      runtimeCommand: ['node', '/app/dist/cli.cjs'],
+    });
+    await adapter.create({ runId: 'keepalive' });
+
+    const runArgs = execDocker.mock.calls[0]?.[0] as string[];
+    expect(runArgs.slice(-2)).toEqual(['node', '/app/dist/cli.cjs']);
+  });
+
+  it('uses image default when no command and no runtimeCommand', async () => {
+    const execDocker = vi.fn(async (args: string[]) => {
+      if (args[0] === 'run') {
+        return 'container-default\n';
       }
       throw new Error(`Unexpected command: ${args.join(' ')}`);
     });
@@ -74,7 +92,8 @@ describe('DockerEnvironmentAdapter', () => {
     await adapter.create({ runId: 'keepalive' });
 
     const runArgs = execDocker.mock.calls[0]?.[0] as string[];
-    expect(runArgs.slice(-3)).toEqual(['sh', '-lc', 'tail -f /dev/null']);
+    // Last arg is the image, no command appended
+    expect(runArgs[runArgs.length - 1]).toBe('node:20-alpine');
   });
 
   it('returns terminated for missing containers on status', async () => {

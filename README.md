@@ -1,296 +1,306 @@
-# KB Labs Adapters
+# Standard Configuration Templates
 
-> **Adapter implementations for KB Labs ecosystem** — OpenAI, Redis, Qdrant, Pino, Analytics, and File System adapters implementing standard KB Labs interfaces.
+This directory contains canonical configuration templates for all `@kb-labs` packages.
 
-[![License](https://img.shields.io/badge/License-KB%20Public%20v1.1-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/Node.js-18.18.0+-green.svg)](https://nodejs.org/)
-[![pnpm](https://img.shields.io/badge/pnpm-9.0.0+-orange.svg)](https://pnpm.io/)
+## 📋 Available Templates
 
-## 🎯 Overview
+### Core Configs (All Packages)
 
-KB Labs Adapters is a collection of adapter implementations that integrate external services and systems with the KB Labs platform. Each adapter implements standard KB Labs interfaces, providing a consistent API across different backends.
+| File | Purpose | Required | Customizable |
+|------|---------|----------|--------------|
+| **eslint.config.js** | Linting rules | ✅ Yes | ⚠️ Minimal |
+| **tsconfig.json** | TypeScript IDE config | ✅ Yes | ❌ No |
+| **tsconfig.build.json** | TypeScript build config | ✅ Yes | ❌ No |
 
-### Available Adapters
+### Tsup Configs (Choose ONE based on package type)
 
-| Package | Description | Implements |
-|---------|-------------|------------|
-| **@kb-labs/adapters-openai** | OpenAI integration | `ILLM`, `IEmbeddings` |
-| **@kb-labs/adapters-redis** | Redis client | `ICacheAdapter` |
-| **@kb-labs/adapters-qdrant** | Qdrant vector database | `IVectorStore` |
-| **@kb-labs/adapters-pino** | Pino logger | `ILogger` |
-| **@kb-labs/adapters-analytics-file** | File-based analytics | `IAnalytics` |
-| **@kb-labs/adapters-fs** | File system operations | `IFileSystem` |
+| Template | Package Type | Use Cases |
+|----------|--------------|-----------|
+| **tsup.config.ts** | 📦 **Library** (default) | Most packages, importable libraries |
+| **tsup.config.bin.ts** | 🔧 **Binary** | Standalone executables, CLI bins |
+| **tsup.config.cli.ts** | ⌨️ **CLI** | CLI packages with commands |
+| **tsup.config.dual.ts** | 📦🔧 **Library + Binary** | Packages with both API and bin |
 
-## 🚀 Quick Start
+### Package.json Examples
 
-### Installation
+| Template | Purpose |
+|----------|---------|
+| **package.json.lib** | Library package example |
+| **package.json.bin** | Binary package example |
+
+## 🎯 Philosophy
+
+**Convention over Configuration**
+
+All `@kb-labs` packages MUST use these exact templates with minimal customization. This ensures:
+
+- ✅ Consistent build output across all packages
+- ✅ Predictable dependency resolution
+- ✅ Unified linting standards
+- ✅ Easy maintenance and upgrades
+
+## 📦 Usage
+
+### For New Packages
+
+#### Step 1: Choose Package Type
+
+**Library Package** (most common):
+```bash
+cp kb-labs-devkit/templates/configs/tsup.config.ts your-package/
+cp kb-labs-devkit/templates/configs/eslint.config.js your-package/
+cp kb-labs-devkit/templates/configs/tsconfig*.json your-package/
+cp kb-labs-devkit/templates/configs/package.json.lib your-package/package.json
+```
+
+**Binary Package** (standalone executables):
+```bash
+cp kb-labs-devkit/templates/configs/tsup.config.bin.ts your-package/tsup.config.ts
+cp kb-labs-devkit/templates/configs/eslint.config.js your-package/
+cp kb-labs-devkit/templates/configs/tsconfig*.json your-package/
+cp kb-labs-devkit/templates/configs/package.json.bin your-package/package.json
+```
+
+**CLI Package** (command handlers):
+```bash
+cp kb-labs-devkit/templates/configs/tsup.config.cli.ts your-package/tsup.config.ts
+cp kb-labs-devkit/templates/configs/eslint.config.js your-package/
+cp kb-labs-devkit/templates/configs/tsconfig*.json your-package/
+cp kb-labs-devkit/templates/configs/package.json.lib your-package/package.json
+```
+
+**Dual Package** (library + binary):
+```bash
+cp kb-labs-devkit/templates/configs/tsup.config.dual.ts your-package/tsup.config.ts
+cp kb-labs-devkit/templates/configs/eslint.config.js your-package/
+cp kb-labs-devkit/templates/configs/tsconfig*.json your-package/
+cp kb-labs-devkit/templates/configs/package.json.lib your-package/package.json
+# Then add "bin" field to package.json
+```
+
+#### Step 2: Customize Package Name
+```bash
+# Edit package.json and update name, description
+```
+
+### For Existing Packages
 
 ```bash
-# Install specific adapter
-pnpm add @kb-labs/adapters-openai
-pnpm add @kb-labs/adapters-redis
-pnpm add @kb-labs/adapters-qdrant
+# Check for drift
+npx kb-devkit-check-configs
 
-# Or install from monorepo
-cd kb-labs-adapters
-pnpm install
+# Auto-fix drift
+npx kb-devkit-check-configs --fix
 ```
 
-### Usage Examples
+## 🔧 Customization Rules
 
-#### OpenAI Adapter
+### tsup.config.ts
+
+**Allowed customizations:**
 
 ```typescript
-import { OpenAILLM, OpenAIEmbeddings } from '@kb-labs/adapters-openai';
+export default defineConfig({
+  ...nodePreset,
+  tsconfig: 'tsconfig.build.json', // ✅ Always required
 
-// LLM adapter
-const llm = new OpenAILLM({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4-turbo',
+  // ✅ OK: Multiple entry points
+  entry: ['src/index.ts', 'src/cli.ts'],
+
+  // ✅ OK: Extra external deps (if really needed)
+  external: ['special-native-module'],
+
+  dts: true, // ✅ Always required
 });
-
-const response = await llm.generate({
-  prompt: 'Explain TypeScript generics',
-  temperature: 0.7,
-});
-
-// Embeddings adapter
-const embeddings = new OpenAIEmbeddings({
-  apiKey: process.env.OPENAI_API_KEY,
-  model: 'text-embedding-3-small',
-});
-
-const vectors = await embeddings.embed(['hello world', 'foo bar']);
 ```
 
-#### Redis Adapter
+**NOT allowed:**
 
 ```typescript
-import { RedisAdapter } from '@kb-labs/adapters-redis';
-
-const redis = new RedisAdapter({
-  host: 'localhost',
-  port: 6379,
+// ❌ WRONG: Don't override preset settings
+export default defineConfig({
+  format: ['esm'],        // Already in preset!
+  target: 'es2022',       // Already in preset!
+  sourcemap: true,        // Already in preset!
+  // ...
 });
 
-await redis.set('key', 'value', { ttl: 3600 });
-const value = await redis.get('key');
+// ❌ WRONG: Don't disable types
+dts: false,
+
+// ❌ WRONG: Don't duplicate external deps
+external: [
+  '@kb-labs/core',  // Already in preset!
+  '@kb-labs/cli',   // Already in preset!
+],
 ```
 
-#### Qdrant Adapter
+### eslint.config.js
 
-```typescript
-import { QdrantVectorStore } from '@kb-labs/adapters-qdrant';
+**Allowed customizations:**
 
-const vectorStore = new QdrantVectorStore({
-  url: 'http://localhost:6333',
-  collection: 'my-collection',
-});
-
-await vectorStore.upsert([
-  { id: '1', vector: [0.1, 0.2, 0.3], metadata: { text: 'example' } },
-]);
-
-const results = await vectorStore.search([0.1, 0.2, 0.3], { limit: 10 });
+```javascript
+export default [
+  ...nodePreset,
+  {
+    // ✅ OK: Project-specific ignores only
+    ignores: ['**/*.generated.ts']
+  }
+];
 ```
 
-#### Pino Logger
+**NOT allowed:**
 
-```typescript
-import { PinoLogger } from '@kb-labs/adapters-pino';
-
-const logger = new PinoLogger({
-  level: 'info',
-  pretty: process.env.NODE_ENV === 'development',
-});
-
-logger.info({ userId: '123' }, 'User logged in');
-logger.error({ err }, 'Failed to process request');
+```javascript
+// ❌ WRONG: Don't duplicate preset ignores
+export default [
+  ...nodePreset,
+  {
+    ignores: [
+      '**/dist/**',        // Already in preset!
+      '**/node_modules/**', // Already in preset!
+    ]
+  }
+];
 ```
 
-## 📦 Packages
+### tsconfig.json & tsconfig.build.json
 
-### [@kb-labs/adapters-openai](./packages/adapters-openai/)
+**NOT customizable!**
 
-OpenAI API integration providing:
-- **LLM adapter** - Text generation with GPT models
-- **Embeddings adapter** - Vector embeddings with text-embedding models
-- Streaming support
-- Token counting
-- Error handling
+These files MUST remain identical to templates. All TypeScript configuration is standardized in DevKit presets.
 
-### [@kb-labs/adapters-redis](./packages/adapters-redis/)
+```json
+// ❌ WRONG: Don't override extends
+{
+  "extends": "./my-custom-base.json"
+}
 
-Redis client adapter providing:
-- Key-value storage
-- TTL support
-- Pipeline operations
-- Pub/sub messaging
-- Connection pooling
-
-### [@kb-labs/adapters-qdrant](./packages/adapters-qdrant/)
-
-Qdrant vector database adapter providing:
-- Vector storage and search
-- Metadata filtering
-- Hybrid search (vector + keyword)
-- Collection management
-- Batch operations
-
-### [@kb-labs/adapters-pino](./packages/adapters-pino/)
-
-Pino logger adapter providing:
-- Structured logging
-- Log levels (trace, debug, info, warn, error, fatal)
-- Child loggers
-- Pretty printing (development)
-- JSON output (production)
-
-### [@kb-labs/adapters-analytics-file](./packages/adapters-analytics-file/)
-
-File-based analytics adapter providing:
-- Event tracking
-- File-based storage
-- JSON format
-- Rotation support
-
-### [@kb-labs/adapters-fs](./packages/adapters-fs/)
-
-File system adapter providing:
-- Read/write operations
-- Directory operations
-- Path utilities
-- Async/promise-based API
-
-## 🏗️ Architecture
-
-All adapters follow the **Adapter Pattern**, implementing standard KB Labs interfaces:
-
-```
-┌─────────────────┐
-│  KB Labs Core   │
-│   Interfaces    │  (ILLM, ILogger, IVectorStore, etc.)
-└────────┬────────┘
-         │
-         │ implements
-         │
-┌────────┴────────┐
-│    Adapters     │
-├─────────────────┤
-│  • OpenAI       │ → OpenAI API
-│  • Redis        │ → Redis Server
-│  • Qdrant       │ → Qdrant API
-│  • Pino         │ → Console/Files
-│  • Analytics    │ → Files
-│  • FS           │ → File System
-└─────────────────┘
+// ❌ WRONG: Don't add compilerOptions
+{
+  "extends": "@kb-labs/devkit/tsconfig/node.json",
+  "compilerOptions": {
+    "strict": false  // Don't override preset!
+  }
+}
 ```
 
-### Benefits
+## 🔍 Drift Detection
 
-- **Swappable implementations** - Change backends without changing code
-- **Testability** - Mock adapters for testing
-- **Consistency** - Same API across different services
-- **Type safety** - TypeScript interfaces enforce contracts
-
-## 🔧 Development
-
-### Prerequisites
-
-- **Node.js** >= 18.18.0
-- **pnpm** >= 9.0.0
-
-### Setup
+DevKit automatically detects configuration drift:
 
 ```bash
-# Clone repository
-git clone https://github.com/kirill-baranov/kb-labs-adapters.git
-cd kb-labs-adapters
+# Check all packages
+npx kb-devkit-check-configs
 
-# Install dependencies
-pnpm install
+# Check specific package
+npx kb-devkit-check-configs --package=@kb-labs/core
 
-# Build all packages
-pnpm build
+# Auto-fix (creates backup)
+npx kb-devkit-check-configs --fix
+
+# CI mode (fail on drift)
+npx kb-devkit-check-configs --ci
 ```
 
-### Development Workflow
+### Drift Detection Rules
 
-```bash
-# Watch mode (auto-rebuild on changes)
-pnpm dev
+| Issue | Severity | Auto-fix |
+|-------|----------|----------|
+| Missing `dts: true` | 🔴 Error | ✅ Yes |
+| Using `dts: false` | 🔴 Error | ✅ Yes |
+| Not using `nodePreset` | 🔴 Error | ⚠️ Manual |
+| Duplicate `external` | 🟡 Warning | ✅ Yes |
+| Duplicate `ignores` | 🟡 Warning | ✅ Yes |
+| Missing templates | 🔴 Error | ✅ Yes |
+| Modified templates | 🔴 Error | ⚠️ Manual |
 
-# Run tests
-pnpm test
+## 📚 Examples
 
-# Run tests with coverage
-pnpm test:coverage
+### ✅ Good Example (Minimal Package)
 
-# Lint code
-pnpm lint
+```typescript
+// tsup.config.ts
+import { defineConfig } from 'tsup';
+import nodePreset from '@kb-labs/devkit/tsup/node.js';
 
-# Type check
-pnpm type-check
-
-# Format code
-pnpm format
+export default defineConfig({
+  ...nodePreset,
+  tsconfig: 'tsconfig.build.json',
+  entry: ['src/index.ts'],
+  dts: true,
+});
 ```
 
-### Creating a New Adapter
+### ✅ Good Example (CLI Package with Multiple Entries)
 
-1. Create package directory: `packages/adapters-<name>/`
-2. Implement KB Labs interface (e.g., `ILLM`, `ILogger`)
-3. Add tests
-4. Export from `index.ts`
-5. Update this README
+```typescript
+// tsup.config.ts
+import { defineConfig } from 'tsup';
+import nodePreset from '@kb-labs/devkit/tsup/node.js';
 
-Example structure:
-
-```
-packages/adapters-example/
-├── src/
-│   ├── index.ts       # Main export
-│   ├── adapter.ts     # Adapter implementation
-│   └── types.ts       # Types and interfaces
-├── test/
-│   └── adapter.test.ts
-├── package.json
-├── tsconfig.json
-└── README.md
+export default defineConfig({
+  ...nodePreset,
+  tsconfig: 'tsconfig.build.json',
+  entry: [
+    'src/index.ts',
+    'src/cli/index.ts',
+    'src/cli/commands/build.ts',
+    'src/cli/commands/test.ts',
+  ],
+  dts: true,
+});
 ```
 
-## 📚 Documentation
+### ❌ Bad Example (Over-configured)
 
-- [Architecture Decisions](./docs/adr/) - ADRs for this repository
-- [Contributing Guide](./CONTRIBUTING.md) - How to contribute
-- Individual package READMEs in `packages/*/README.md`
+```typescript
+// tsup.config.ts
+import { defineConfig } from 'tsup';
 
-## 🤝 Contributing
+// ❌ Not using preset!
+export default defineConfig({
+  format: ['esm'],
+  target: 'es2022',
+  sourcemap: true,
+  clean: true,
+  dts: true,
+  entry: ['src/index.ts'],
+  external: [/^@kb-labs\/.*/],  // Manual external
+});
+```
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for development guidelines and contribution process.
+## 🚀 Migration Guide
 
-## 🔗 Related Projects
+### From Custom Config to Standard Template
 
-### Core Platform
-- [@kb-labs/core](https://github.com/KirillBaranov/kb-labs-core) - Core runtime and utilities
-- [@kb-labs/cli](https://github.com/KirillBaranov/kb-labs-cli) - CLI interface
-- [@kb-labs/plugin](https://github.com/KirillBaranov/kb-labs-plugin) - Plugin system
+1. **Backup your current config**
+   ```bash
+   cp tsup.config.ts tsup.config.ts.backup
+   ```
 
-### Integration
-- [@kb-labs/mind](https://github.com/KirillBaranov/kb-labs-mind) - AI-powered code search (uses OpenAI, Qdrant adapters)
-- [@kb-labs/workflow](https://github.com/KirillBaranov/kb-labs-workflow) - Workflow engine (uses Redis adapter)
-- [@kb-labs/analytics](https://github.com/KirillBaranov/kb-labs-analytics) - Analytics (uses analytics-file adapter)
+2. **Copy standard template**
+   ```bash
+   cp kb-labs-devkit/templates/configs/tsup.config.ts .
+   ```
 
-## License
+3. **Migrate customizations** (only if needed)
+   - Compare your backup with template
+   - Extract only truly necessary customizations
+   - Add them with comments explaining why
 
-KB Public License v1.1 - see [LICENSE](LICENSE) for details.
+4. **Test build**
+   ```bash
+   pnpm run build
+   ```
 
-This is open source software with some restrictions on:
-- Offering as a hosted service (SaaS/PaaS)
-- Creating competing platform products
+5. **Verify types**
+   ```bash
+   npx kb-devkit-check-types
+   ```
 
-For commercial licensing inquiries: contact@kblabs.dev
+## 🔗 Related
 
-**User Guides:**
-- [English Guide](../LICENSE-GUIDE.en.md)
-- [Русское руководство](../LICENSE-GUIDE.ru.md)
+- [DevKit README](../../README.md)
+- [DevKit Usage Guide](../../USAGE_GUIDE.md)
+- [ADR-0009: Unified Build Convention](../../docs/adr/0009-unified-build-convention.md)

@@ -92,6 +92,7 @@ export class CacheEventBusAdapter implements IEventBus {
       timer: null,
       subscriberId,
       lastTimestamp: Date.now(),
+      seenIds: new Set(),
     };
 
     // Polling function
@@ -99,24 +100,47 @@ export class CacheEventBusAdapter implements IEventBus {
       try {
         const now = Date.now();
 
-        // Get events newer than last processed
+        // Get events from lastTimestamp (inclusive) to catch events with same ms timestamp
         const events = await this.cache.zrangebyscore(
           key,
-          subscription.lastTimestamp + 1,
+          subscription.lastTimestamp,
           now
         );
 
-        // Process events sequentially to preserve order and track lastTimestamp correctly.
-        // Parallel execution would break ordering guarantees and cursor tracking.
+        let maxTimestamp = subscription.lastTimestamp;
+
+        // Process events sequentially to preserve order.
         for (const eventJson of events) {
           try {
             const storedEvent = JSON.parse(eventJson) as StoredEvent<T>;
-             
+
+            // Skip already-delivered events (dedup by ID)
+            if (subscription.seenIds.has(storedEvent.id)) {continue;}
+
+            subscription.seenIds.add(storedEvent.id);
             await handler(storedEvent.data);
-            subscription.lastTimestamp = storedEvent.timestamp;
+
+            if (storedEvent.timestamp > maxTimestamp) {
+              maxTimestamp = storedEvent.timestamp;
+            }
           } catch (err) {
             console.error(`[CacheEventBus] Handler error for topic "${topic}":`, err);
           }
+        }
+
+        // Advance cursor — purge seenIds for timestamps we've moved past
+        if (maxTimestamp > subscription.lastTimestamp) {
+          subscription.seenIds.clear();
+          // Re-add IDs at the new maxTimestamp boundary (they may repeat next poll)
+          for (const eventJson of events) {
+            try {
+              const ev = JSON.parse(eventJson) as StoredEvent<T>;
+              if (ev.timestamp === maxTimestamp) {
+                subscription.seenIds.add(ev.id);
+              }
+            } catch { /* ignore parse errors */ }
+          }
+          subscription.lastTimestamp = maxTimestamp;
         }
 
         // Cleanup old events (older than TTL)

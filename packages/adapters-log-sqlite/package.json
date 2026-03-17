@@ -32,14 +32,14 @@
   },
   "devDependencies": {
     "@kb-labs/adapters-sqlite": "link:../adapters-sqlite",
-    "@kb-labs/core-platform": "^1.2.0",
+    "@kb-labs/core-platform": "workspace:*",
     "@types/node": "^24.3.3",
     "eslint": "^9",
     "rimraf": "^6.0.1",
     "tsup": "^8.5.0",
     "typescript": "^5.6.3",
     "vitest": "^3.2.4",
-    "@kb-labs/devkit": "link:../../../kb-labs-devkit"
+    "@kb-labs/devkit": "workspace:*"
   },
   "private": true,
   "engines": {

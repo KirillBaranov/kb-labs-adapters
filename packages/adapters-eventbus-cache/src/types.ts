@@ -53,4 +53,6 @@ export interface Subscription {
   subscriberId: string;
   /** Last processed event timestamp */
   lastTimestamp: number;
+  /** IDs of events already delivered (for dedup within same timestamp) */
+  seenIds: Set<string>;
 }

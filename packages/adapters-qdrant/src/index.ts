@@ -2,6 +2,11 @@
  * @module @kb-labs/adapters-qdrant
  * Qdrant adapter implementing IVectorStore interface.
  *
+ * All Qdrant client calls that touch the network are wrapped with
+ * exponential-backoff retry logic ({@link withRetry}) so that transient
+ * failures (ECONNREFUSED, ETIMEDOUT, HTTP 503, etc.) are handled
+ * automatically without propagating to callers.
+ *
  * @example
  * ```typescript
  * import { createAdapter } from '@kb-labs/adapters-qdrant';
@@ -31,7 +36,12 @@ import type {
 
 // Re-export manifest
 export { manifest } from "./manifest.js";
+// Re-export retry utilities so callers can customise if needed
+export { withRetry, isTransientError } from "./retry.js";
+export type { RetryOptions } from "./retry.js";
+
 import { createHash } from "node:crypto";
+import { withRetry, type RetryOptions } from "./retry.js";
 
 /**
  * Configuration for Qdrant vector store adapter.
@@ -47,6 +57,14 @@ export interface QdrantVectorStoreConfig {
   dimension?: number;
   /** Request timeout in ms (default: 30000) */
   timeout?: number;
+  /**
+   * Retry configuration applied to every Qdrant client call.
+   * Transient errors (ECONNREFUSED, ETIMEDOUT, HTTP 503 / 429 / 502 / 504)
+   * are retried automatically with full-jitter exponential back-off.
+   *
+   * Set `maxAttempts: 1` to disable retries entirely.
+   */
+  retry?: RetryOptions;
 }
 
 /**
@@ -66,7 +84,27 @@ function stringToUUID(str: string): string {
 }
 
 /**
+ * Default retry options used for all Qdrant client calls.
+ *
+ * Strategy: up to 4 attempts, full-jitter exponential back-off starting at
+ * 200 ms, capped at 10 s.  That gives worst-case wait of ~10 s before the
+ * final attempt, which comfortably covers a Qdrant cold-start or a brief
+ * 503 during a rolling restart.
+ */
+const DEFAULT_RETRY_OPTIONS: Required<
+  Pick<RetryOptions, "maxAttempts" | "baseDelayMs" | "maxDelayMs">
+> = {
+  maxAttempts: 4,
+  baseDelayMs: 200,
+  maxDelayMs: 10_000,
+};
+
+/**
  * Qdrant implementation of IVectorStore interface.
+ *
+ * All network-facing operations (`search`, `upsert`, `delete`, `scroll`,
+ * `retrieve`, `getCollections`, `createCollection`, `getCollection`) are
+ * wrapped with {@link withRetry} to transparently handle transient errors.
  */
 export class QdrantVectorStore implements IVectorStore {
   private client: QdrantClient;
@@ -74,6 +112,7 @@ export class QdrantVectorStore implements IVectorStore {
   private dimension: number;
   private initialized = false;
   private url: string;
+  private retryOptions: RetryOptions;
 
   // Adaptive concurrency state
   private concurrency = 3; // Start with 3 parallel batches
@@ -89,10 +128,20 @@ export class QdrantVectorStore implements IVectorStore {
     });
     this.collectionName = config.collectionName ?? "kb-vectors";
     this.dimension = config.dimension ?? 1536;
+    // Merge caller-supplied retry options over the defaults
+    this.retryOptions = { ...DEFAULT_RETRY_OPTIONS, ...config.retry };
   }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
 
   /**
    * Ensure collection exists with correct configuration.
+   *
+   * `getCollections` and `createCollection` are both wrapped with retry so
+   * that a fresh Qdrant instance that is still starting up (ECONNREFUSED) is
+   * handled gracefully.
    */
   private async ensureCollection(): Promise<void> {
     if (this.initialized) {
@@ -100,20 +149,26 @@ export class QdrantVectorStore implements IVectorStore {
     }
 
     try {
-      // Check if collection exists
-      const collections = await this.client.getCollections();
+      const collections = await withRetry(
+        () => this.client.getCollections(),
+        this.retryOptions,
+      );
+
       const exists = collections.collections.some(
         (c) => c.name === this.collectionName,
       );
 
       if (!exists) {
-        // Create collection with cosine similarity
-        await this.client.createCollection(this.collectionName, {
-          vectors: {
-            size: this.dimension,
-            distance: "Cosine",
-          },
-        });
+        await withRetry(
+          () =>
+            this.client.createCollection(this.collectionName, {
+              vectors: {
+                size: this.dimension,
+                distance: "Cosine",
+              },
+            }),
+          this.retryOptions,
+        );
       }
 
       this.initialized = true;
@@ -124,6 +179,17 @@ export class QdrantVectorStore implements IVectorStore {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // IVectorStore — required methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Search for the nearest vectors.
+   *
+   * The underlying `this.client.search()` call is wrapped with
+   * {@link withRetry} to handle ECONNREFUSED, ETIMEDOUT, and HTTP 503
+   * transparently.
+   */
   async search(
     query: number[],
     limit: number,
@@ -150,12 +216,17 @@ export class QdrantVectorStore implements IVectorStore {
         }
       : undefined;
 
-    const response = await this.client.search(this.collectionName, {
+    const searchParams = {
       vector: query,
       limit,
       filter: qdrantFilter,
       with_payload: true,
-    });
+    } as const;
+
+    const response = await withRetry(
+      () => this.client.search(this.collectionName, searchParams),
+      this.retryOptions,
+    );
 
     return response.map((point) => ({
       id: String(point.id),
@@ -164,6 +235,15 @@ export class QdrantVectorStore implements IVectorStore {
     }));
   }
 
+  /**
+   * Upsert vectors in batches with adaptive parallel processing.
+   *
+   * Each individual `this.client.upsert()` call is wrapped with
+   * {@link withRetry}.  The adaptive-concurrency logic is preserved:
+   * on sustained success the concurrency goes up; on sustained failure
+   * it is halved (the retry wrapper already handles brief transient
+   * errors before they reach the concurrency bookkeeping).
+   */
   async upsert(vectors: VectorRecord[]): Promise<void> {
     await this.ensureCollection();
 
@@ -206,10 +286,16 @@ export class QdrantVectorStore implements IVectorStore {
 
       const batchPromises = batchGroup.map(async (batch) => {
         try {
-          await this.client.upsert(this.collectionName, {
-            wait: false, // ⚡ Don't wait for indexing - let Qdrant index asynchronously
-            points: batch,
-          });
+          // ⚡ Don't wait for indexing — let Qdrant index asynchronously.
+          // Transient failures are transparently retried before bubbling up.
+          await withRetry(
+            () =>
+              this.client.upsert(this.collectionName, {
+                wait: false,
+                points: batch,
+              }),
+            this.retryOptions,
+          );
 
           // Success: increase concurrency gradually
           this.consecutiveErrors = 0;
@@ -219,7 +305,7 @@ export class QdrantVectorStore implements IVectorStore {
             this.consecutiveSuccesses = 0;
           }
         } catch (error) {
-          // Error: decrease concurrency for graceful degradation
+          // Persistent (non-transient) error after all retries — adjust concurrency
           this.consecutiveSuccesses = 0;
           this.consecutiveErrors++;
           if (this.consecutiveErrors >= 2 && this.concurrency > 1) {
@@ -233,16 +319,21 @@ export class QdrantVectorStore implements IVectorStore {
 
       // Wait for this group of concurrent batches to complete
       try {
-         
         await Promise.all(batchPromises);
         batchIndex += batchGroup.length;
       } catch (_error) {
         // If group fails, retry with reduced concurrency (already adjusted above)
-        // Don't increment batchIndex - retry same batches
+        // Don't increment batchIndex — retry same batches
       }
     }
   }
 
+  /**
+   * Delete vectors by ID.
+   *
+   * The underlying `this.client.delete()` call is wrapped with
+   * {@link withRetry}.
+   */
   async delete(ids: string[]): Promise<void> {
     await this.ensureCollection();
 
@@ -252,23 +343,41 @@ export class QdrantVectorStore implements IVectorStore {
 
     const uuids = ids.map(stringToUUID);
 
-    await this.client.delete(this.collectionName, {
-      wait: false, // ⚡ Don't wait for indexing - let Qdrant process asynchronously
-      points: uuids,
-    });
-  }
-
-  async count(): Promise<number> {
-    await this.ensureCollection();
-
-    const info = await this.client.getCollection(this.collectionName);
-    return info.points_count ?? 0;
+    await withRetry(
+      () =>
+        this.client.delete(this.collectionName, {
+          wait: false, // ⚡ Don't wait for indexing - let Qdrant process asynchronously
+          points: uuids,
+        }),
+      this.retryOptions,
+    );
   }
 
   /**
-   * Get vectors by IDs (implements optional IVectorStore method).
-   * @param ids - Array of vector IDs to retrieve
-   * @returns Array of vector records
+   * Return the total number of vectors in the collection.
+   *
+   * The underlying `this.client.getCollection()` call is wrapped with
+   * {@link withRetry}.
+   */
+  async count(): Promise<number> {
+    await this.ensureCollection();
+
+    const info = await withRetry(
+      () => this.client.getCollection(this.collectionName),
+      this.retryOptions,
+    );
+    return info.points_count ?? 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // IVectorStore — optional methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get vectors by IDs.
+   *
+   * The underlying `this.client.retrieve()` call is wrapped with
+   * {@link withRetry}.
    */
   async get(ids: string[]): Promise<VectorRecord[]> {
     await this.ensureCollection();
@@ -277,11 +386,15 @@ export class QdrantVectorStore implements IVectorStore {
       return [];
     }
 
-    const response = await this.client.retrieve(this.collectionName, {
-      ids: ids.map((id) => stringToUUID(id)),
-      with_vector: true,
-      with_payload: true,
-    });
+    const response = await withRetry(
+      () =>
+        this.client.retrieve(this.collectionName, {
+          ids: ids.map((id) => stringToUUID(id)),
+          with_vector: true,
+          with_payload: true,
+        }),
+      this.retryOptions,
+    );
 
     return response.map((point) => ({
       id: String(point.id),
@@ -291,20 +404,24 @@ export class QdrantVectorStore implements IVectorStore {
   }
 
   /**
-   * Query vectors by metadata filter (implements optional IVectorStore method).
-   * @param filter - Metadata filter to apply
-   * @returns Array of matching vector records
+   * Query vectors by metadata filter.
+   *
+   * The underlying `this.client.scroll()` call is wrapped with
+   * {@link withRetry}.
    */
   async query(filter: VectorFilter): Promise<VectorRecord[]> {
     await this.ensureCollection();
 
-    // Qdrant scroll API for querying by metadata
-    const response = await this.client.scroll(this.collectionName, {
-      filter: this.convertFilter(filter),
-      with_vector: true,
-      with_payload: true,
-      limit: 10000, // Max limit for bulk retrieval
-    });
+    const response = await withRetry(
+      () =>
+        this.client.scroll(this.collectionName, {
+          filter: this.convertFilter(filter),
+          with_vector: true,
+          with_payload: true,
+          limit: 10000, // Max limit for bulk retrieval
+        }),
+      this.retryOptions,
+    );
 
     return response.points.map((point) => ({
       id: String(point.id),
@@ -312,6 +429,10 @@ export class QdrantVectorStore implements IVectorStore {
       metadata: point.payload as Record<string, unknown> | undefined,
     }));
   }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
 
   /**
    * Convert platform VectorFilter to Qdrant filter format.
@@ -360,6 +481,7 @@ export function createAdapter(
     collectionName: config?.collectionName,
     dimension: config?.dimension,
     timeout: config?.timeout,
+    retry: config?.retry,
   };
   return new QdrantVectorStore(finalConfig);
 }

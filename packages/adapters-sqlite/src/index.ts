@@ -35,7 +35,7 @@
 
 import Database from "better-sqlite3";
 import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import type {
   ISQLDatabase,
   SQLQueryResult,
@@ -52,8 +52,15 @@ export interface SQLiteConfig {
   /**
    * Database file path.
    * Use ':memory:' for in-memory database (useful for testing).
+   * Relative paths are resolved against workspace.cwd (injected by core-runtime).
    */
   filename: string;
+
+  /**
+   * Workspace context injected by core-runtime.
+   * Provides cwd for resolving relative filename paths.
+   */
+  workspace?: { cwd: string };
 
   /**
    * Open in readonly mode (default: false)
@@ -91,13 +98,20 @@ export class SQLiteAdapter implements ISQLDatabase {
   private closed = false;
 
   constructor(config: SQLiteConfig) {
+    // Resolve relative filename against workspace root (injected by core-runtime)
+    const cwd = config.workspace?.cwd ?? process.cwd();
+    const resolvedFilename =
+      config.filename === ":memory:" || isAbsolute(config.filename)
+        ? config.filename
+        : join(cwd, config.filename);
+
     // Create parent directory if it doesn't exist (unless :memory:)
-    if (config.filename !== ":memory:" && !config.readonly) {
-      const dir = dirname(config.filename);
+    if (resolvedFilename !== ":memory:" && !config.readonly) {
+      const dir = dirname(resolvedFilename);
       mkdirSync(dir, { recursive: true });
     }
 
-    this.db = new Database(config.filename, {
+    this.db = new Database(resolvedFilename, {
       readonly: config.readonly ?? false,
       fileMustExist: false, // Create if not exists
     });

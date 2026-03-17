@@ -28,7 +28,12 @@ export interface OpenAILLMConfig {
   defaultModel?: string;
   /** Organization ID (optional) */
   organization?: string;
+  /** Default max output tokens when caller does not specify. Overrides the API default (4096). */
+  defaultMaxTokens?: number;
 }
+
+/** Default max output tokens — avoids hitting the 4096 API default mid-response. */
+const DEFAULT_MAX_TOKENS = 16_384;
 
 /**
  * OpenAI implementation of ILLM interface.
@@ -36,6 +41,7 @@ export interface OpenAILLMConfig {
 export class OpenAILLM implements ILLM {
   private client: OpenAI;
   private defaultModel: string;
+  private defaultMaxTokens: number;
 
   constructor(config: OpenAILLMConfig = {}) {
     this.client = new OpenAI({
@@ -44,6 +50,7 @@ export class OpenAILLM implements ILLM {
       organization: config.organization,
     });
     this.defaultModel = config.defaultModel ?? "gpt-4o-mini";
+    this.defaultMaxTokens = config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS;
   }
 
   getProtocolCapabilities(): LLMProtocolCapabilities {
@@ -103,7 +110,7 @@ export class OpenAILLM implements ILLM {
       model,
       messages,
       temperature: options?.temperature,
-      max_tokens: options?.maxTokens,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
       stop: options?.stop,
       ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
     });
@@ -141,7 +148,7 @@ export class OpenAILLM implements ILLM {
       model,
       messages,
       temperature: options?.temperature,
-      max_tokens: options?.maxTokens,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
       stop: options?.stop,
       stream: true,
       ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
@@ -232,7 +239,7 @@ export class OpenAILLM implements ILLM {
       tools,
       tool_choice,
       temperature: options?.temperature,
-      max_tokens: options?.maxTokens,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
       stop: options?.stop,
       ...(this.buildCacheRequestPatch(options) as Record<string, unknown>),
     });
@@ -261,6 +268,13 @@ export class OpenAILLM implements ILLM {
       }
     }
 
+    // Map OpenAI finish_reason to normalized stopReason
+    const finishReason = choice?.finish_reason;
+    const stopReason = finishReason === 'stop' ? 'end_turn'
+      : finishReason === 'tool_calls' ? 'tool_use'
+      : finishReason === 'length' ? 'max_tokens'
+      : finishReason ?? undefined;
+
     return {
       content,
       usage: {
@@ -273,6 +287,7 @@ export class OpenAILLM implements ILLM {
       },
       model: response.model,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      stopReason,
     };
   }
 }

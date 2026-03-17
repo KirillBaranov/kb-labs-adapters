@@ -29,7 +29,12 @@ export interface VibeProxyLLMConfig {
   defaultModel?: string;
   /** Request timeout in ms (defaults to 120000) */
   timeout?: number;
+  /** Default max output tokens when caller does not specify. Overrides the hardcoded 4096. */
+  defaultMaxTokens?: number;
 }
+
+/** Default max output tokens — avoids hitting the 4096 hardcoded limit mid-response. */
+const DEFAULT_MAX_TOKENS = 16_384;
 
 /**
  * VibeProxy Messages API request format.
@@ -92,6 +97,7 @@ export class VibeProxyLLM implements ILLM {
   private apiKey: string;
   private defaultModel: string;
   private timeout: number;
+  private defaultMaxTokens: number;
 
   constructor(config: VibeProxyLLMConfig = {}) {
     this.baseURL =
@@ -103,6 +109,7 @@ export class VibeProxyLLM implements ILLM {
       process.env.VIBEPROXY_MODEL ??
       "claude-sonnet-4-20250514";
     this.timeout = config.timeout ?? 120000;
+    this.defaultMaxTokens = config.defaultMaxTokens ?? DEFAULT_MAX_TOKENS;
   }
 
   getProtocolCapabilities(): LLMProtocolCapabilities {
@@ -306,7 +313,7 @@ export class VibeProxyLLM implements ILLM {
 
     const requestBody: VibeProxyMessagesRequest = {
       model,
-      max_tokens: options?.maxTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
       messages: [{ role: "user", content: prompt }],
     };
 
@@ -373,7 +380,7 @@ export class VibeProxyLLM implements ILLM {
 
     const requestBody: VibeProxyMessagesRequest = {
       model,
-      max_tokens: options?.maxTokens ?? 4096,
+      max_tokens: options?.maxTokens ?? this.defaultMaxTokens,
       messages: converted.messages,
       tools: options.toolChoice !== "none" ? tools : undefined,
       tool_choice: options.toolChoice !== "none" ? toolChoice : undefined,
@@ -413,6 +420,7 @@ export class VibeProxyLLM implements ILLM {
       },
       model: response.model,
       toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+      stopReason: response.stop_reason,
     };
   }
 }

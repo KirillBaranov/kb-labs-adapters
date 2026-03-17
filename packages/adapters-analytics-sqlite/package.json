@@ -36,10 +36,10 @@
   },
   "dependencies": {
     "better-sqlite3": "^11.8.0",
-    "@kb-labs/core-platform": "^1.2.0"
+    "@kb-labs/core-platform": "workspace:*"
   },
   "devDependencies": {
-    "@kb-labs/devkit": "link:../../../kb-labs-devkit",
+    "@kb-labs/devkit": "workspace:*",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.3.3",
     "eslint": "^9",

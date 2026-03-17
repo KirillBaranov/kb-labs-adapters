@@ -1,7 +1,7 @@
 {
-  "name": "@kb-labs/adapters-pino-http",
+  "name": "@kb-labs/adapters-workspace-agent",
   "version": "0.1.0",
-  "description": "Pino HTTP transport for streaming logs to REST API",
+  "description": "Workspace adapter that materializes workspaces from a remote Host Agent via Gateway",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -26,11 +26,11 @@
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint . --fix"
   },
-  "dependencies": {
-    "pino": "latest",
-    "pino-abstract-transport": "^2.0.0"
+  "peerDependencies": {
+    "@kb-labs/core-platform": "*"
   },
   "devDependencies": {
+    "@kb-labs/core-platform": "workspace:*",
     "@types/node": "^24.3.3",
     "eslint": "^9",
     "tsup": "^8.5.0",

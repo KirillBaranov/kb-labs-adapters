@@ -9,6 +9,9 @@ import { randomUUID } from 'node:crypto';
 import type {
   IEnvironmentProvider,
   CreateEnvironmentRequest,
+  ReserveEnvironmentRequest,
+  ReservedEnvironment,
+  StartEnvironmentRequest,
   EnvironmentDescriptor,
   EnvironmentStatusResult,
   EnvironmentLease,
@@ -25,6 +28,21 @@ interface WorkspaceContext {
 }
 
 export type DockerExec = (args: string[]) => Promise<string>;
+
+/**
+ * Gateway coordination config for container runtime.
+ * The adapter owns all transport-specific setup — callers know nothing about Gateway.
+ */
+export interface GatewayConfig {
+  /** WebSocket URL the runtime-server connects to, e.g. ws://kb-gateway:4000 */
+  wsUrl: string;
+  /** JWT secret for signing per-container access tokens */
+  jwtSecret: string;
+  /** Internal secret for dispatch endpoint */
+  dispatchSecret: string;
+  /** Dispatch endpoint URL, e.g. http://localhost:4000/internal/dispatch */
+  dispatchUrl: string;
+}
 
 /**
  * Docker provider configuration.
@@ -44,10 +62,23 @@ export interface DockerEnvironmentAdapterConfig {
    */
   execDocker?: DockerExec;
   /**
-   * Keep-alive command used when no command provided in create request.
-   * Set to [] to run image default command.
+   * Command to run inside the container to start the runtime server.
+   * E.g. ['node', '/app/dist/cli.cjs']
    */
-  defaultCommand?: string[];
+  runtimeCommand?: string[];
+  /**
+   * Extra host mappings passed as --add-host flags.
+   * E.g. ['host.docker.internal:host-gateway'] for Linux dev environments
+   * where host.docker.internal is not automatically available.
+   */
+  extraHosts?: string[];
+  /**
+   * Gateway coordination config.
+   * When present, the adapter mints a JWT per container and injects
+   * GATEWAY_WS_URL, RUNTIME_HOST_ID, GATEWAY_TOKEN, GATEWAY_ALLOW_WS into env.
+   * Callers never see these details.
+   */
+  gateway?: GatewayConfig;
 }
 
 /**
@@ -63,7 +94,14 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
   private readonly workspaceMountPath: string;
   private readonly workspaceCwd?: string;
   private readonly dockerExec: DockerExec;
-  private readonly defaultCommand?: string[];
+  private readonly runtimeCommand?: string[];
+  private readonly extraHosts: string[];
+  private readonly gateway?: GatewayConfig;
+
+  // reserved environments pending start(): environmentId → reservation metadata
+  private readonly reserved = new Map<string, { runId: string; ttlMs: number; createdAt: Date }>();
+  // active environments: environmentId → Docker containerId (for getStatus/destroy lookup)
+  private readonly active = new Map<string, string>();
 
   constructor(private readonly config: DockerEnvironmentAdapterConfig = {}) {
     this.dockerBinary = config.dockerBinary ?? 'docker';
@@ -75,9 +113,109 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
     this.workspaceMountPath = config.workspaceMountPath ?? '/workspace';
     this.workspaceCwd = config.workspace?.cwd;
     this.dockerExec = config.execDocker ?? this.defaultExecDocker.bind(this);
-    this.defaultCommand = config.defaultCommand ?? ['sh', '-lc', 'tail -f /dev/null'];
+    this.runtimeCommand = config.runtimeCommand;
+    this.extraHosts = config.extraHosts ?? [];
+    this.gateway = config.gateway;
   }
 
+  /**
+   * Phase 1: Reserve an environmentId without starting the container.
+   * The adapter generates a stable runtimeHostId used as environmentId.
+   * When gateway config is present, this id will be used for JWT and RUNTIME_HOST_ID.
+   */
+  async reserve(request: ReserveEnvironmentRequest): Promise<ReservedEnvironment> {
+    const runId = request.runId ?? randomUUID();
+    const environmentId = `runtime-${runId}`;
+    const ttlMs = request.ttlMs ?? this.defaultTtlMs;
+
+    this.reserved.set(environmentId, { runId, ttlMs, createdAt: new Date() });
+
+    return { environmentId };
+  }
+
+  /**
+   * Phase 2: Start the container for a previously reserved environmentId.
+   * Injects all gateway coordination env vars (JWT, WS URL, etc.) internally.
+   */
+  async start(environmentId: string, request: StartEnvironmentRequest): Promise<EnvironmentDescriptor> {
+    const reservation = this.reserved.get(environmentId);
+    if (!reservation) {
+      throw new Error(`No reservation found for environmentId: ${environmentId}. Call reserve() first.`);
+    }
+    this.reserved.delete(environmentId);
+
+    const { runId, ttlMs } = reservation;
+    const image = request.image ?? this.defaultImage;
+    const containerName = this.buildContainerName(runId);
+    const args = ['run', '-d'];
+
+    if (this.autoRemove) {
+      args.push('--rm');
+    }
+
+    args.push('--name', containerName);
+    args.push('--label', `kb.run_id=${runId}`);
+    args.push('--label', `kb.environment_id=${environmentId}`);
+
+    if (this.network) {
+      args.push('--network', this.network);
+    }
+
+    for (const host of this.extraHosts) {
+      args.push('--add-host', host);
+    }
+
+    // Adapter-owned env vars: gateway coordination
+    const namespaceId = (request.metadata?.namespaceId as string | undefined) ?? 'default';
+    const gatewayEnv = await this.buildGatewayEnv(environmentId, namespaceId);
+    for (const [key, value] of Object.entries(gatewayEnv)) {
+      args.push('-e', `${key}=${value}`);
+    }
+
+    // Caller-supplied extra env vars (merged after gateway env)
+    for (const [key, value] of Object.entries(request.env ?? {})) {
+      args.push('-e', `${key}=${value}`);
+    }
+
+    const workspacePath = request.workspacePath ?? this.workspaceCwd;
+    if (workspacePath && this.mountWorkspace) {
+      args.push('-v', `${workspacePath}:${this.workspaceMountPath}`);
+      args.push('-w', this.workspaceMountPath);
+    }
+
+    args.push(image);
+
+    const command = this.runtimeCommand;
+    if (command && command.length > 0) {
+      args.push(...command);
+    }
+
+    const containerId = (await this.execDocker(args)).trim();
+
+    // Register containerId for getStatus/destroy lookup by environmentId
+    this.active.set(environmentId, containerId);
+
+    const now = new Date();
+    const lease = this.buildLease(now, ttlMs, runId);
+
+    return {
+      environmentId,
+      provider: 'docker-cli',
+      status: 'ready',
+      createdAt: now.toISOString(),
+      updatedAt: now.toISOString(),
+      lease,
+      metadata: {
+        image,
+        containerName,
+        containerId,
+      },
+    };
+  }
+
+  /**
+   * Single-phase create (legacy / simple use cases without gateway).
+   */
   async create(request: CreateEnvironmentRequest): Promise<EnvironmentDescriptor> {
     const image = request.image ?? this.defaultImage;
     const ttlMs = request.ttlMs ?? this.defaultTtlMs;
@@ -100,6 +238,10 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
       args.push('--network', this.network);
     }
 
+    for (const host of this.extraHosts) {
+      args.push('--add-host', host);
+    }
+
     for (const [key, value] of Object.entries(request.env ?? {})) {
       args.push('-e', `${key}=${value}`);
     }
@@ -114,8 +256,8 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
 
     if (request.command && request.command.length > 0) {
       args.push(...request.command);
-    } else if (this.defaultCommand && this.defaultCommand.length > 0) {
-      args.push(...this.defaultCommand);
+    } else if (this.runtimeCommand && this.runtimeCommand.length > 0) {
+      args.push(...this.runtimeCommand);
     }
 
     const containerId = (await this.execDocker(args)).trim();
@@ -140,13 +282,15 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
 
   async getStatus(environmentId: string): Promise<EnvironmentStatusResult> {
     const now = new Date().toISOString();
+    // Resolve logical environmentId → actual Docker container ID (from start())
+    const dockerRef = this.active.get(environmentId) ?? environmentId;
 
     try {
       const state = (await this.execDocker([
         'inspect',
         '-f',
         '{{.State.Status}}',
-        environmentId,
+        dockerRef,
       ])).trim();
 
       return {
@@ -169,8 +313,14 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
   }
 
   async destroy(environmentId: string): Promise<void> {
+    // Clean up any pending reservation
+    this.reserved.delete(environmentId);
+    // Resolve logical environmentId → actual Docker container ID (from start())
+    const dockerRef = this.active.get(environmentId) ?? environmentId;
+    this.active.delete(environmentId);
+
     try {
-      await this.execDocker(['rm', '-f', environmentId]);
+      await this.execDocker(['rm', '-f', dockerRef]);
     } catch (error) {
       if (this.isMissingContainerError(error)) {
         return;
@@ -192,7 +342,33 @@ export class DockerEnvironmentAdapter implements IEnvironmentProvider {
       supportsSnapshots: false,
       custom: {
         provider: 'docker-cli',
+        supportsTwoPhaseProvisioning: true,
       },
+    };
+  }
+
+  /**
+   * Build gateway coordination env vars for a container.
+   * Mints a short-lived JWT using the environmentId as hostId.
+   * Returns empty object when gateway is not configured.
+   */
+  private async buildGatewayEnv(environmentId: string, namespaceId: string): Promise<Record<string, string>> {
+    if (!this.gateway) {
+      return {};
+    }
+
+    const { signAccessToken } = await import('@kb-labs/gateway-auth');
+    const { token } = await signAccessToken(
+      { hostId: environmentId, namespaceId, type: 'machine' as const, tier: 'free' as const },
+      { secret: this.gateway.jwtSecret },
+    );
+
+    return {
+      GATEWAY_WS_URL: this.gateway.wsUrl,
+      RUNTIME_HOST_ID: environmentId,
+      GATEWAY_TOKEN: token,
+      // Allow ws:// on Docker bridge networks (trusted, orchestrated network)
+      GATEWAY_ALLOW_WS: '1',
     };
   }
 

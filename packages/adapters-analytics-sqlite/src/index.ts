@@ -110,6 +110,8 @@ function getDefaultMetrics(typeFilter?: string | string[]): string[] {
 export interface SQLiteAnalyticsOptions {
   /** Path to the SQLite database file. Default: .kb/analytics/analytics.sqlite */
   dbPath?: string;
+  /** Alias for dbPath — accepted for config compatibility with kb.config.json */
+  filename?: string;
   /** Analytics context for event enrichment */
   context?: AnalyticsContext;
   /** Workspace context injected by core-runtime (provides cwd for relative path resolution) */
@@ -131,7 +133,7 @@ export class SQLiteAnalytics implements IAnalytics {
 
   constructor(options: SQLiteAnalyticsOptions = {}) {
     const cwd = options.workspace?.cwd ?? process.cwd();
-    const rawPath = options.dbPath ?? '.kb/analytics/analytics.sqlite';
+    const rawPath = options.dbPath ?? options.filename ?? '.kb/analytics/analytics.sqlite';
     this.dbPath = isAbsolute(rawPath) ? rawPath : join(cwd, rawPath);
 
     this.context = options.context ?? options.analytics ?? {

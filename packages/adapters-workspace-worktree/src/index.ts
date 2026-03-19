@@ -71,8 +71,9 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       // Pull latest on source branch first
       this.exec(`git fetch origin ${safeBranch} --quiet`, this.repoRoot);
 
-      // Create worktree
-      this.exec(`git worktree add "${worktreePath}" ${safeBranch}`, this.repoRoot);
+      // Create worktree from detached HEAD at branch tip
+      // --detach avoids "branch already checked out" error
+      this.exec(`git worktree add --detach "${worktreePath}" origin/${safeBranch}`, this.repoRoot);
 
       // Initialize submodules if enabled
       if (this.initSubmodules) {

@@ -41,7 +41,7 @@ const TIMEOUTS = {
   worktree: 30_000,
   submodules: 120_000,
   install: 300_000,
-  build: 600_000,
+  build: 900_000,
   cleanup: 30_000,
 } as const;
 
@@ -136,33 +136,30 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       }
 
       // Stage 3: Install dependencies
+      // pnpm hardlinking breaks on first install in a fresh worktree
+      // (only package.json files get linked, not actual module sources).
+      // Workaround: rm -rf node_modules first, then install without --frozen-lockfile.
       if (this.installDeps) {
         progress('dependencies', 'Installing dependencies (pnpm install)...', 65);
         this.exec(
-          'pnpm install --frozen-lockfile',
+          'rm -rf node_modules && pnpm install',
           worktreePath,
           TIMEOUTS.install,
         );
         progress('dependencies', 'Dependencies installed', 70);
       }
 
-      // Stage 4: Copy dist/ from host repo instead of building from scratch.
-      // Building in worktree fails because pnpm workspace resolution breaks with
-      // gitlink submodules. Copying dist/ is instant and always works since host
-      // repo is already built.
+      // Stage 4: Build all packages.
+      // Sequential build (concurrency=1) avoids DTS race conditions
+      // where parallel tsup processes conflict on shared type declarations.
       if (this.buildAfterInstall) {
-        progress('build', 'Copying build artifacts from host repo...', 75);
+        progress('build', 'Building all packages (pnpm -r --no-bail --workspace-concurrency=1 run build)...', 75);
         this.exec(
-          [
-            'rsync -a --include="*/" --include="dist/***" --exclude="*"',
-            '--exclude="node_modules"',
-            `"${this.repoRoot}/"`,
-            `"${worktreePath}/"`,
-          ].join(' '),
+          'pnpm -r --no-bail --workspace-concurrency=1 run build',
           worktreePath,
           TIMEOUTS.build,
         );
-        progress('build', 'Build artifacts copied', 95);
+        progress('build', 'Build complete', 95);
       }
 
       progress('ready', 'Workspace ready', 100);

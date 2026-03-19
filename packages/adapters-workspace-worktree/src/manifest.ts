@@ -34,5 +34,10 @@ export const manifest: AdapterManifest = {
       default: true,
       description: 'Initialize git submodules in worktree',
     },
+    buildAfterInstall: {
+      type: 'boolean',
+      default: true,
+      description: 'Run pnpm -r run build after install (required for CLI and plugin commands)',
+    },
   },
 };

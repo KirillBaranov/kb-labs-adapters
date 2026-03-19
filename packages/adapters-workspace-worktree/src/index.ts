@@ -24,6 +24,7 @@ export interface WorktreeWorkspaceAdapterConfig {
   branch?: string;
   initSubmodules?: boolean;
   installDeps?: boolean;
+  buildAfterInstall?: boolean;
   workspace?: WorkspaceContext;
 }
 
@@ -40,6 +41,7 @@ const TIMEOUTS = {
   worktree: 30_000,
   submodules: 120_000,
   install: 300_000,
+  build: 600_000,
   cleanup: 30_000,
 } as const;
 
@@ -49,6 +51,7 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
   private readonly defaultBranch: string;
   private readonly initSubmodules: boolean;
   private readonly installDeps: boolean;
+  private readonly buildAfterInstall: boolean;
   private readonly records = new Map<string, WorktreeRecord>();
 
   constructor(config: WorktreeWorkspaceAdapterConfig = {}) {
@@ -57,6 +60,7 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
     this.defaultBranch = config.branch ?? 'main';
     this.initSubmodules = config.initSubmodules ?? true;
     this.installDeps = config.installDeps ?? true;
+    this.buildAfterInstall = config.buildAfterInstall ?? true;
   }
 
   async materialize(request: MaterializeWorkspaceRequest): Promise<WorkspaceDescriptor> {
@@ -139,7 +143,18 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
           worktreePath,
           TIMEOUTS.install,
         );
-        progress('dependencies', 'Dependencies installed', 95);
+        progress('dependencies', 'Dependencies installed', 70);
+      }
+
+      // Stage 4: Build all packages (respects dependency order via devkit)
+      if (this.buildAfterInstall) {
+        progress('build', 'Building all packages (pnpm -r run build)...', 75);
+        this.exec(
+          'pnpm -r run build',
+          worktreePath,
+          TIMEOUTS.build,
+        );
+        progress('build', 'Build complete', 95);
       }
 
       progress('ready', 'Workspace ready', 100);

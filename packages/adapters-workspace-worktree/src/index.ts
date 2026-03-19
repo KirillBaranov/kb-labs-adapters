@@ -75,9 +75,14 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       // --detach avoids "branch already checked out" error
       this.exec(`git worktree add --detach "${worktreePath}" origin/${safeBranch}`, this.repoRoot);
 
-      // Initialize submodules if enabled
+      // Initialize submodules if enabled (non-blocking — partial init is ok)
       if (this.initSubmodules) {
-        this.exec('git submodule update --init --recursive', worktreePath);
+        try {
+          this.exec('git submodule update --init --recursive', worktreePath);
+        } catch {
+          // Partial submodule init is acceptable — some may fail due to
+          // missing .gitmodules entries or network issues
+        }
       }
 
       const record: WorktreeRecord = {

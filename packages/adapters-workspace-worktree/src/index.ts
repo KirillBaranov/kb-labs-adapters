@@ -150,7 +150,7 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       if (this.buildAfterInstall) {
         progress('build', 'Building all packages (pnpm -r run build)...', 75);
         this.exec(
-          'pnpm -r run build',
+          'pnpm -r --no-bail run build',
           worktreePath,
           TIMEOUTS.build,
         );

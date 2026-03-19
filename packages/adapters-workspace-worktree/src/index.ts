@@ -24,7 +24,6 @@ export interface WorktreeWorkspaceAdapterConfig {
   branch?: string;
   initSubmodules?: boolean;
   installDeps?: boolean;
-  buildAfterInstall?: boolean;
   workspace?: WorkspaceContext;
 }
 
@@ -39,9 +38,8 @@ interface WorktreeRecord {
 
 const TIMEOUTS = {
   worktree: 30_000,
-  submodules: 300_000,
+  submodules: 120_000,
   install: 300_000,
-  build: 900_000,
   cleanup: 30_000,
 } as const;
 
@@ -51,7 +49,6 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
   private readonly defaultBranch: string;
   private readonly initSubmodules: boolean;
   private readonly installDeps: boolean;
-  private readonly buildAfterInstall: boolean;
   private readonly records = new Map<string, WorktreeRecord>();
 
   constructor(config: WorktreeWorkspaceAdapterConfig = {}) {
@@ -60,7 +57,6 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
     this.defaultBranch = config.branch ?? 'main';
     this.initSubmodules = config.initSubmodules ?? true;
     this.installDeps = config.installDeps ?? true;
-    this.buildAfterInstall = config.buildAfterInstall ?? true;
   }
 
   async materialize(request: MaterializeWorkspaceRequest): Promise<WorkspaceDescriptor> {
@@ -128,7 +124,7 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       if (this.initSubmodules) {
         progress('submodules', 'Initializing submodules...', 30);
         this.exec(
-          'git submodule update --init --recursive --no-fetch',
+          'git submodule update --init --recursive',
           worktreePath,
           TIMEOUTS.submodules,
         );
@@ -136,30 +132,14 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       }
 
       // Stage 3: Install dependencies
-      // pnpm hardlinking breaks on first install in a fresh worktree
-      // (only package.json files get linked, not actual module sources).
-      // Workaround: rm -rf node_modules first, then install without --frozen-lockfile.
       if (this.installDeps) {
         progress('dependencies', 'Installing dependencies (pnpm install)...', 65);
         this.exec(
-          'rm -rf node_modules && pnpm install',
+          'pnpm install --frozen-lockfile',
           worktreePath,
           TIMEOUTS.install,
         );
-        progress('dependencies', 'Dependencies installed', 70);
-      }
-
-      // Stage 4: Build all packages.
-      // Sequential build (concurrency=1) avoids DTS race conditions
-      // where parallel tsup processes conflict on shared type declarations.
-      if (this.buildAfterInstall) {
-        progress('build', 'Building all packages (pnpm -r --no-bail --workspace-concurrency=1 run build)...', 75);
-        this.exec(
-          'pnpm -r --no-bail --workspace-concurrency=1 run build || true',
-          worktreePath,
-          TIMEOUTS.build,
-        );
-        progress('build', 'Build complete', 95);
+        progress('dependencies', 'Dependencies installed', 95);
       }
 
       progress('ready', 'Workspace ready', 100);

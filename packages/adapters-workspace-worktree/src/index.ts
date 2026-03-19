@@ -146,17 +146,23 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
         progress('dependencies', 'Dependencies installed', 70);
       }
 
-      // Stage 4: Build all packages (respects dependency order via pnpm workspace)
-      // Uses `|| true` because some packages may have build errors (known tech debt).
-      // The critical packages (CLI, core, adapters) will build successfully.
+      // Stage 4: Copy dist/ from host repo instead of building from scratch.
+      // Building in worktree fails because pnpm workspace resolution breaks with
+      // gitlink submodules. Copying dist/ is instant and always works since host
+      // repo is already built.
       if (this.buildAfterInstall) {
-        progress('build', 'Building all packages (pnpm -r run build)...', 75);
+        progress('build', 'Copying build artifacts from host repo...', 75);
         this.exec(
-          'pnpm -r --no-bail run build || true',
+          [
+            'rsync -a --include="*/" --include="dist/***" --exclude="*"',
+            '--exclude="node_modules"',
+            `"${this.repoRoot}/"`,
+            `"${worktreePath}/"`,
+          ].join(' '),
           worktreePath,
           TIMEOUTS.build,
         );
-        progress('build', 'Build complete', 95);
+        progress('build', 'Build artifacts copied', 95);
       }
 
       progress('ready', 'Workspace ready', 100);

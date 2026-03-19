@@ -61,12 +61,18 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
 
     const worktreePath = path.join(this.worktreeBaseDir, workspaceId);
 
+    // Sanitize branch name — only allow safe git ref characters
+    const safeBranch = branch.replace(/[^a-zA-Z0-9_\-./]/g, '');
+    if (!safeBranch || safeBranch !== branch) {
+      throw new Error(`Invalid branch name: ${branch}`);
+    }
+
     try {
       // Pull latest on source branch first
-      this.exec(`git fetch origin ${branch} --quiet`, this.repoRoot);
+      this.exec(`git fetch origin ${safeBranch} --quiet`, this.repoRoot);
 
       // Create worktree
-      this.exec(`git worktree add "${worktreePath}" ${branch}`, this.repoRoot);
+      this.exec(`git worktree add "${worktreePath}" ${safeBranch}`, this.repoRoot);
 
       // Initialize submodules if enabled
       if (this.initSubmodules) {

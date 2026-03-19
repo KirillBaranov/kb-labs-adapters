@@ -1,27 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
-import path from 'node:path';
-import os from 'node:os';
-import { LocalFsWorkspaceAdapter } from './index.js';
+import { WorktreeWorkspaceAdapter } from './index.js';
 
-describe('LocalFsWorkspaceAdapter', () => {
-  it('materializes and attaches workspace', async () => {
-    const tmp = await mkdtemp(path.join(os.tmpdir(), 'kb-workspace-'));
-    try {
-      const adapter = new LocalFsWorkspaceAdapter({ workspace: { cwd: tmp } });
-      const workspace = await adapter.materialize({ basePath: './demo' });
-      expect(workspace.status).toBe('ready');
+describe('WorktreeWorkspaceAdapter', () => {
+  it('should export createAdapter factory', async () => {
+    const { createAdapter } = await import('./index.js');
+    expect(typeof createAdapter).toBe('function');
+  });
 
-      const attachment = await adapter.attach({
-        workspaceId: workspace.workspaceId,
-        environmentId: 'env_1',
-      });
-      expect(attachment.mountPath).toBe('/workspace');
+  it('should create adapter with default config', () => {
+    const adapter = new WorktreeWorkspaceAdapter();
+    expect(adapter).toBeDefined();
+    expect(typeof adapter.materialize).toBe('function');
+    expect(typeof adapter.release).toBe('function');
+    expect(typeof adapter.getStatus).toBe('function');
+    expect(typeof adapter.getCapabilities).toBe('function');
+  });
 
-      const status = await adapter.getStatus(workspace.workspaceId);
-      expect(status.status).toBe('attached');
-    } finally {
-      await rm(tmp, { recursive: true, force: true });
-    }
+  it('should return capabilities', () => {
+    const adapter = new WorktreeWorkspaceAdapter();
+    const caps = adapter.getCapabilities();
+    expect(caps.supportsAttach).toBe(true);
+    expect(caps.supportsRelease).toBe(true);
+  });
+
+  it('should return released status for unknown workspace', async () => {
+    const adapter = new WorktreeWorkspaceAdapter();
+    const status = await adapter.getStatus('nonexistent');
+    expect(status.status).toBe('released');
+  });
+
+  it('should reject invalid branch names', async () => {
+    const adapter = new WorktreeWorkspaceAdapter();
+    await expect(
+      adapter.materialize({ sourceRef: 'main; rm -rf /' })
+    ).rejects.toThrow('Invalid branch name');
   });
 });

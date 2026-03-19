@@ -23,6 +23,7 @@ export interface WorktreeWorkspaceAdapterConfig {
   worktreeDir?: string;
   branch?: string;
   initSubmodules?: boolean;
+  installDeps?: boolean;
   workspace?: WorkspaceContext;
 }
 
@@ -35,11 +36,19 @@ interface WorktreeRecord {
   runId?: string;
 }
 
+const TIMEOUTS = {
+  worktree: 30_000,
+  submodules: 120_000,
+  install: 300_000,
+  cleanup: 30_000,
+} as const;
+
 export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
   private readonly repoRoot: string;
   private readonly worktreeBaseDir: string;
   private readonly defaultBranch: string;
   private readonly initSubmodules: boolean;
+  private readonly installDeps: boolean;
   private readonly records = new Map<string, WorktreeRecord>();
 
   constructor(config: WorktreeWorkspaceAdapterConfig = {}) {
@@ -47,41 +56,63 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
     this.worktreeBaseDir = path.resolve(this.repoRoot, config.worktreeDir ?? '.worktrees');
     this.defaultBranch = config.branch ?? 'main';
     this.initSubmodules = config.initSubmodules ?? true;
+    this.installDeps = config.installDeps ?? true;
   }
 
   async materialize(request: MaterializeWorkspaceRequest): Promise<WorkspaceDescriptor> {
     const workspaceId = request.workspaceId ?? `wt_${randomUUID().slice(0, 8)}`;
     const branch = request.sourceRef ?? this.defaultBranch;
     const runId = (request.metadata as Record<string, unknown>)?.runId as string | undefined;
+    const onProgress = request.onProgress;
 
-    // Create worktree directory
     if (!existsSync(this.worktreeBaseDir)) {
       mkdirSync(this.worktreeBaseDir, { recursive: true });
     }
 
     const worktreePath = path.join(this.worktreeBaseDir, workspaceId);
 
-    // Sanitize branch name — only allow safe git ref characters
     const safeBranch = branch.replace(/[^a-zA-Z0-9_\-./]/g, '');
     if (!safeBranch || safeBranch !== branch) {
       throw new Error(`Invalid branch name: ${branch}`);
     }
 
-    try {
-      // Create worktree from current local branch HEAD
-      // --detach avoids "branch already checked out" error
-      // No fetch — uses local state, no network dependency
-      this.exec(`git worktree add --detach "${worktreePath}" ${safeBranch}`, this.repoRoot);
+    const progress = (stage: string, message: string, pct?: number) => {
+      onProgress?.({ stage, message, progress: pct });
+    };
 
-      // Initialize submodules if enabled (non-blocking — partial init is ok)
+    try {
+      // Stage 1: Create worktree
+      progress('worktree', `Creating worktree from ${safeBranch}...`, 10);
+      this.exec(
+        `git worktree add --detach "${worktreePath}" ${safeBranch}`,
+        this.repoRoot,
+        TIMEOUTS.worktree,
+      );
+      progress('worktree', 'Worktree created', 25);
+
+      // Stage 2: Initialize submodules
       if (this.initSubmodules) {
-        try {
-          this.exec('git submodule update --init --recursive', worktreePath);
-        } catch {
-          // Partial submodule init is acceptable — some may fail due to
-          // missing .gitmodules entries or network issues
-        }
+        progress('submodules', 'Initializing submodules...', 30);
+        this.exec(
+          'git submodule update --init --recursive',
+          worktreePath,
+          TIMEOUTS.submodules,
+        );
+        progress('submodules', 'Submodules ready', 60);
       }
+
+      // Stage 3: Install dependencies
+      if (this.installDeps) {
+        progress('dependencies', 'Installing dependencies (pnpm install)...', 65);
+        this.exec(
+          'pnpm install --frozen-lockfile',
+          worktreePath,
+          TIMEOUTS.install,
+        );
+        progress('dependencies', 'Dependencies installed', 95);
+      }
+
+      progress('ready', 'Workspace ready', 100);
 
       const record: WorktreeRecord = {
         workspaceId,
@@ -103,13 +134,14 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
         metadata: { branch, runId, repoRoot: this.repoRoot },
       };
     } catch (error) {
-      // Cleanup on failure
+      progress('failed', `Provisioning failed: ${error instanceof Error ? error.message : String(error)}`);
+
       try {
-        this.exec(`git worktree remove "${worktreePath}" --force`, this.repoRoot);
+        this.exec(`git worktree remove "${worktreePath}" --force`, this.repoRoot, TIMEOUTS.cleanup);
       } catch { /* ignore cleanup errors */ }
 
       throw new Error(
-        `Failed to create worktree: ${error instanceof Error ? error.message : String(error)}`
+        `Failed to provision workspace: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -130,16 +162,13 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
     }
 
     try {
-      // Remove worktree
-      this.exec(`git worktree remove "${record.worktreePath}" --force`, this.repoRoot);
+      this.exec(`git worktree remove "${record.worktreePath}" --force`, this.repoRoot, TIMEOUTS.cleanup);
     } catch {
-      // Force cleanup if git worktree remove fails
       if (existsSync(record.worktreePath)) {
         rmSync(record.worktreePath, { recursive: true, force: true });
       }
-      // Prune stale worktree references
       try {
-        this.exec('git worktree prune', this.repoRoot);
+        this.exec('git worktree prune', this.repoRoot, TIMEOUTS.cleanup);
       } catch { /* ignore */ }
     }
 
@@ -168,11 +197,11 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
     };
   }
 
-  private exec(command: string, cwd: string): string {
+  private exec(command: string, cwd: string, timeout = 60_000): string {
     return execSync(command, {
       cwd,
       encoding: 'utf8',
-      timeout: 60_000,
+      timeout,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
   }

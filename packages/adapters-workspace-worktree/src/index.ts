@@ -71,6 +71,36 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
 
     const worktreePath = path.join(this.worktreeBaseDir, workspaceId);
 
+    // Reuse existing worktree (retry scenario — same run, same workspace)
+    if (existsSync(worktreePath)) {
+      const existing = this.records.get(workspaceId);
+      if (existing) {
+        onProgress?.({ stage: 'reuse', message: 'Reusing existing worktree', progress: 100 });
+        return {
+          workspaceId,
+          provider: 'worktree',
+          status: 'ready',
+          rootPath: worktreePath,
+          createdAt: existing.createdAt,
+          updatedAt: new Date().toISOString(),
+          metadata: { branch, runId, repoRoot: this.repoRoot, reused: true },
+        };
+      }
+      // Worktree exists on disk but not in records (stale) — reuse anyway
+      onProgress?.({ stage: 'reuse', message: 'Reusing existing worktree (recovered)', progress: 100 });
+      const now = new Date().toISOString();
+      this.records.set(workspaceId, { workspaceId, worktreePath, branch, status: 'ready', createdAt: now, runId });
+      return {
+        workspaceId,
+        provider: 'worktree',
+        status: 'ready',
+        rootPath: worktreePath,
+        createdAt: now,
+        updatedAt: now,
+        metadata: { branch, runId, repoRoot: this.repoRoot, reused: true },
+      };
+    }
+
     const safeBranch = branch.replace(/[^a-zA-Z0-9_\-./]/g, '');
     if (!safeBranch || safeBranch !== branch) {
       throw new Error(`Invalid branch name: ${branch}`);

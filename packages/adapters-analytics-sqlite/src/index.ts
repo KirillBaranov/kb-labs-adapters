@@ -157,6 +157,32 @@ export class SQLiteAnalytics implements IAnalytics {
     for (const idx of CREATE_INDEXES) {
       this.db.exec(idx);
     }
+
+    // Ensure clean shutdown — checkpoint WAL and close connection.
+    // Without this, process.exit() leaves WAL in inconsistent state
+    // causing "database disk image is malformed" for other processes.
+    this._onExit = () => this.close();
+    process.on('exit', this._onExit);
+    process.on('SIGINT', this._onExit);
+    process.on('SIGTERM', this._onExit);
+  }
+
+  private _onExit: () => void;
+  private _closed = false;
+
+  /** Checkpoint WAL and close the database connection cleanly. */
+  close(): void {
+    if (this._closed) return;
+    this._closed = true;
+    try {
+      this.db.pragma('wal_checkpoint(TRUNCATE)');
+      this.db.close();
+    } catch {
+      // Already closed or corrupted — nothing we can do
+    }
+    process.removeListener('exit', this._onExit);
+    process.removeListener('SIGINT', this._onExit);
+    process.removeListener('SIGTERM', this._onExit);
   }
 
   // ─── Write ────────────────────────────────────────────────────────────────

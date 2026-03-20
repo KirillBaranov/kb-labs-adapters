@@ -15,6 +15,7 @@ import { join, isAbsolute, dirname } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import type {
   IAnalytics,
+  IDisposable,
   AnalyticsContext,
   AnalyticsEvent,
   EventsQuery,
@@ -25,6 +26,7 @@ import type {
   DlqStatus,
   DailyStats,
 } from '@kb-labs/core-platform/adapters';
+
 
 // ─── DDL ──────────────────────────────────────────────────────────────────────
 
@@ -126,7 +128,8 @@ export interface SQLiteAnalyticsOptions {
  * SQLite-based analytics adapter.
  * Uses WAL mode — supports concurrent reads/writes from multiple processes.
  */
-export class SQLiteAnalytics implements IAnalytics {
+export class SQLiteAnalytics implements IAnalytics, IDisposable {
+
   private readonly dbPath: string;
   private context: AnalyticsContext;
   private db: Database.Database;
@@ -184,6 +187,25 @@ export class SQLiteAnalytics implements IAnalytics {
     process.removeListener('SIGINT', this._onExit);
     process.removeListener('SIGTERM', this._onExit);
   }
+
+  /**
+   * Implements IDisposable — delegates to close().
+   *
+   * close() already provides the complete, correct shutdown sequence:
+   *   1. Idempotency guard (this._closed)
+   *   2. WAL TRUNCATE checkpoint (flush frames → main DB file, empty WAL)
+   *   3. Connection close (this.db.close())
+   *   4. Process listener deregistration (exit, SIGINT, SIGTERM)
+   *
+   * PlatformContainer.shutdown() checks for close() first (container.ts line 830),
+   * so the container will call close() on this adapter. dispose() is provided so
+   * that isDisposable() returns true and this adapter is typed as IDisposable for
+   * observability logging in service-bootstrap's onBeforeShutdown hook.
+   */
+  dispose(): void {
+    this.close();
+  }
+
 
   // ─── Write ────────────────────────────────────────────────────────────────
 

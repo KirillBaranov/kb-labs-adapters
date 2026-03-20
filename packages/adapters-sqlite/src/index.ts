@@ -38,9 +38,11 @@ import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type {
   ISQLDatabase,
+  IDisposable,
   SQLQueryResult,
   SQLTransaction,
 } from "@kb-labs/core-platform/adapters";
+
 
 // Re-export manifest
 export { manifest } from "./manifest.js";
@@ -93,9 +95,14 @@ export interface SQLiteConfig {
  * - Prepared statement caching (automatic via better-sqlite3)
  * - Transaction support with savepoints
  */
-export class SQLiteAdapter implements ISQLDatabase {
+export class SQLiteAdapter implements ISQLDatabase, IDisposable {
   private db: Database.Database;
   private closed = false;
+  /** Stored so we can deregister it in dispose() — prevents listener accumulation. */
+  private _onExit: (() => void) | null = null;
+  /** True for ':memory:' databases — skip WAL ops and exit-handler registration. */
+  private _isMemory = false;
+
 
   constructor(config: SQLiteConfig) {
     // Resolve relative filename against workspace root (injected by core-runtime)
@@ -128,7 +135,30 @@ export class SQLiteAdapter implements ISQLDatabase {
     if (config.foreignKeys !== false) {
       this.db.pragma("foreign_keys = ON");
     }
+
+    // ── Exit handler registration ───────────────────────────────────────────
+    // Register a synchronous exit handler only for file-backed, writable, WAL-mode databases.
+    //
+    // WHY: If the process exits abruptly (SIGTERM, SIGKILL, unhandled rejection) without
+    // explicitly calling dispose() or close(), the WAL file may contain unflushed frames.
+    // The next process opening the database will perform WAL recovery, which is safe but
+    // slow. An explicit TRUNCATE checkpoint moves all WAL frames into the main database
+    // file and empties the WAL, making re-open instantaneous.
+    //
+    // WHY SYNC: process.on('exit') callbacks must be synchronous — async code scheduled
+    // after the event loop drains is silently dropped by Node.js. better-sqlite3 is
+    // natively synchronous so this is correct and efficient.
+    //
+    // WHY NOT :memory:: In-memory databases have no WAL file on disk; there is nothing
+    // to checkpoint and nothing to persist. Registering a process listener for them would
+    // be a no-op at best and a source of listener-count warnings at worst.
+    this._isMemory = resolvedFilename === ":memory:";
+    if (!this._isMemory && !config.readonly && config.wal !== false) {
+      this._onExit = () => { this.dispose(); };
+      process.on("exit", this._onExit);
+    }
   }
+
 
   /**
    * Execute a SQL query.
@@ -218,14 +248,59 @@ export class SQLiteAdapter implements ISQLDatabase {
   }
 
   /**
-   * Close the database connection.
+   * Checkpoint WAL and close the database connection. Implements IDisposable.
+   *
+   * Synchronous by design — process.on('exit') callbacks that are async are
+   * silently dropped by Node.js after the event loop drains. better-sqlite3
+   * is natively synchronous so sync disposal is both correct and sufficient.
+   *
+   * Idempotent: subsequent calls after the first are no-ops (guarded by this.closed).
+   *
+   * Sequence:
+   *   1. Set this.closed = true immediately to block new queries.
+   *   2. Deregister the 'exit' listener (prevents double-dispose on graceful shutdown
+   *      followed by normal process exit — both paths are safe but one is enough).
+   *   3. Checkpoint WAL into the main DB file and truncate the WAL to zero bytes
+   *      (TRUNCATE mode — fastest and most space-efficient).
+   *   4. Close the better-sqlite3 connection.
    */
-  async close(): Promise<void> {
-    if (!this.closed) {
+  dispose(): void {
+    if (this.closed) return;
+    this.closed = true;
+
+    // Deregister exit listener — prevents a second dispose() call when graceful
+    // shutdown (SIGTERM → platform.shutdown() → dispose()) is followed by process.exit(0).
+    if (this._onExit !== null) {
+      process.removeListener("exit", this._onExit);
+      this._onExit = null;
+    }
+
+    try {
+      // Checkpoint WAL: flush all WAL frames into the main database file and
+      // truncate the WAL to 0 bytes. Skipped for :memory: (no WAL file) and
+      // readonly connections (cannot write checkpoint).
+      if (!this._isMemory && !this.db.readonly) {
+        this.db.pragma("wal_checkpoint(TRUNCATE)");
+      }
       this.db.close();
-      this.closed = true;
+    } catch {
+      // Already closed or I/O error at exit time — nothing we can do.
+      // Swallow silently: throwing from a dispose() called during process.exit
+      // would print an uncaught exception without actually halting anything useful.
     }
   }
+
+  /**
+   * Implements ISQLDatabase.close() — delegates to dispose() for WAL checkpoint.
+   *
+   * PlatformContainer.shutdown() checks for close() before dispose() (container.ts line 830),
+   * so this path is taken when the container disposes this adapter. Delegating to dispose()
+   * ensures WAL checkpoint happens regardless of which method is called.
+   */
+  async close(): Promise<void> {
+    this.dispose();
+  }
+
 
   /**
    * Check if database is closed.

@@ -13,6 +13,19 @@ import type {
   AnalyticsContext,
 } from "@kb-labs/core-platform/adapters";
 
+/** Local date stamp for event file names. Adapter uses local date, not UTC. */
+function todayStamp(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
+function eventFile(dir: string, stamp: string): string {
+  return join(dir, `events-${stamp}.jsonl`);
+}
+
 describe("Analytics Source Attribution", () => {
   let testDir: string;
   let analytics: IAnalytics;
@@ -39,21 +52,12 @@ describe("Analytics Source Attribution", () => {
       };
 
       analytics = createAdapter({ baseDir: testDir, analytics: context });
-
-      // Track an event
+      const stamp = todayStamp();
       await analytics.track("test.event", { foo: "bar" });
 
-      // Read the generated file
-      const files = await readFile(
-        join(
-          testDir,
-          `events-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.jsonl`,
-        ),
-        "utf-8",
-      );
+      const files = await readFile(eventFile(testDir, stamp), "utf-8");
       const event = JSON.parse(files.trim());
 
-      // Verify source is from context
       expect(event.source).toEqual({
         product: "@kb-labs/ai-review",
         version: "1.0.0",
@@ -61,21 +65,13 @@ describe("Analytics Source Attribution", () => {
     });
 
     it("should use default source if no context provided", async () => {
-      // Create analytics without context
       analytics = createAdapter({ baseDir: testDir });
-
+      const stamp = todayStamp();
       await analytics.track("test.event", { foo: "bar" });
 
-      const files = await readFile(
-        join(
-          testDir,
-          `events-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.jsonl`,
-        ),
-        "utf-8",
-      );
+      const files = await readFile(eventFile(testDir, stamp), "utf-8");
       const event = JSON.parse(files.trim());
 
-      // Verify default source
       expect(event.source).toEqual({
         product: "unknown",
         version: "0.0.0",
@@ -97,26 +93,13 @@ describe("Analytics Source Attribution", () => {
       };
 
       analytics = createAdapter({ baseDir: testDir, analytics: rootContext });
+      const stamp = todayStamp();
 
-      // Simulate Mind plugin tracking event
       await analytics.track("mind.rag-index.started", { scope: "default" });
-
-      // Simulate Workflow plugin tracking event
-      await analytics.track("workflow.run.started", {
-        workflowId: "test-workflow",
-      });
-
-      // Simulate Commit plugin tracking event
+      await analytics.track("workflow.run.started", { workflowId: "test-workflow" });
       await analytics.track("commit.generated", { commits: 2 });
 
-      // Read all events
-      const files = await readFile(
-        join(
-          testDir,
-          `events-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.jsonl`,
-        ),
-        "utf-8",
-      );
+      const files = await readFile(eventFile(testDir, stamp), "utf-8");
       const events = files
         .trim()
         .split("\n")
@@ -147,15 +130,10 @@ describe("Analytics Source Attribution", () => {
       };
 
       analytics = createAdapter({ baseDir: testDir, analytics: context });
+      const stamp = todayStamp();
       await analytics.track("test.event", { data: "test" });
 
-      const files = await readFile(
-        join(
-          testDir,
-          `events-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}.jsonl`,
-        ),
-        "utf-8",
-      );
+      const files = await readFile(eventFile(testDir, stamp), "utf-8");
       const event = JSON.parse(files.trim());
 
       // Validate kb.v1 schema

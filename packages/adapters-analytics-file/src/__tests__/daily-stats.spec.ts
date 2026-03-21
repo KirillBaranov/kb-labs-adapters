@@ -52,6 +52,10 @@ describe("FileAnalytics - getDailyStats", () => {
     });
 
     it("should filter by date range", async () => {
+      // Use local date (adapter writes files with local date, not UTC)
+      const d = new Date();
+      const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
       // Track an event
       await analytics.track("llm.completion.completed", {
         model: "gpt-4",
@@ -60,7 +64,6 @@ describe("FileAnalytics - getDailyStats", () => {
         durationMs: 1500,
       });
 
-      const today = new Date().toISOString().split("T")[0];
       const yesterday = new Date(Date.now() - 86400000)
         .toISOString()
         .split("T")[0];

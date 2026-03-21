@@ -175,7 +175,7 @@ export class SQLiteAnalytics implements IAnalytics, IDisposable {
 
   /** Checkpoint WAL and close the database connection cleanly. */
   close(): void {
-    if (this._closed) return;
+    if (this._closed) {return;}
     this._closed = true;
     try {
       this.db.pragma('wal_checkpoint(TRUNCATE)');

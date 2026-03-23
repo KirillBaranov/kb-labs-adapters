@@ -29,12 +29,12 @@
     "test:watch": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "@kb-labs/core-platform": "workspace:*",
+    "@kb-labs/core-platform": "link:../../../../platform/kb-labs-core/packages/core-platform",
     "fs-extra": "^11.0.0",
     "date-fns": "^3.6.0"
   },
   "devDependencies": {
-    "@kb-labs/devkit": "workspace:*",
+    "@kb-labs/devkit": "link:../../../kb-labs-devkit",
     "@types/node": "^24.3.3",
     "@types/fs-extra": "^11.0.0",
     "eslint": "^9",

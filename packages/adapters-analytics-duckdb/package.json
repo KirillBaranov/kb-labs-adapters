@@ -36,10 +36,10 @@
   },
   "dependencies": {
     "@duckdb/node-api": "^1.4.4-r.1",
-    "@kb-labs/core-platform": "workspace:*"
+    "@kb-labs/core-platform": "link:../../../../platform/kb-labs-core/packages/core-platform"
   },
   "devDependencies": {
-    "@kb-labs/devkit": "workspace:*",
+    "@kb-labs/devkit": "link:../../../kb-labs-devkit",
     "@types/node": "^24.3.3",
     "eslint": "^9",
     "rimraf": "^6.0.1",

@@ -23,7 +23,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@kb-labs/core-runtime": "workspace:*"
+    "@kb-labs/core-runtime": "link:../../../../platform/kb-labs-core/packages/core-runtime"
   },
   "devDependencies": {
     "@types/node": "^24.3.3",
@@ -31,7 +31,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.6.3",
     "vitest": "^3.2.4",
-    "@kb-labs/devkit": "workspace:*",
+    "@kb-labs/devkit": "link:../../../kb-labs-devkit",
     "rimraf": "^6.0.1"
   },
   "keywords": [

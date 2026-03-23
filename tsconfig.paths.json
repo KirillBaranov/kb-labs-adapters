@@ -10,16 +10,16 @@
         "packages/adapters-sqlite/src/*"
       ],
       "@kb-labs/core-platform": [
-        "../kb-labs-core/packages/core-platform/src/index.ts"
+        "../../platform/kb-labs-core/packages/core-platform/src/index.ts"
       ],
       "@kb-labs/core-platform/*": [
-        "../kb-labs-core/packages/core-platform/src/*"
+        "../../platform/kb-labs-core/packages/core-platform/src/*"
       ],
       "@kb-labs/core-runtime": [
-        "../kb-labs-core/packages/core-runtime/src/index.ts"
+        "../../platform/kb-labs-core/packages/core-runtime/src/index.ts"
       ],
       "@kb-labs/core-runtime/*": [
-        "../kb-labs-core/packages/core-runtime/src/*"
+        "../../platform/kb-labs-core/packages/core-runtime/src/*"
       ]
     }
   }

@@ -1,7 +1,6 @@
 {
   "name": "@kb-labs/adapters-analytics-duckdb",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "DuckDB analytics adapter for KB Labs platform (SQL-native time-series analytics)",
   "main": "./dist/index.js",

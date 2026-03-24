@@ -41,7 +41,6 @@
     "vitest": "^3.2.4",
     "@kb-labs/devkit": "link:../../../kb-labs-devkit"
   },
-  "private": true,
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"

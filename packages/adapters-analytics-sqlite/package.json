@@ -1,7 +1,6 @@
 {
   "name": "@kb-labs/adapters-analytics-sqlite",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "SQLite analytics adapter for KB Labs platform — concurrent writes, SQL analytics, no lock issues",
   "main": "./dist/index.js",

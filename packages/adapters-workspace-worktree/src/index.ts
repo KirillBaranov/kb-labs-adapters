@@ -38,7 +38,7 @@ interface WorktreeRecord {
 
 const TIMEOUTS = {
   worktree: 30_000,
-  submodules: 120_000,
+  submodules: 600_000,
   install: 300_000,
   cleanup: 30_000,
 } as const;
@@ -124,7 +124,7 @@ export class WorktreeWorkspaceAdapter implements IWorkspaceProvider {
       if (this.initSubmodules) {
         progress('submodules', 'Initializing submodules...', 30);
         this.exec(
-          'git submodule update --init --recursive',
+          'git submodule update --recursive',
           worktreePath,
           TIMEOUTS.submodules,
         );

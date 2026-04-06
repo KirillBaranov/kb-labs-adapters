@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters-openai",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "OpenAI adapter implementing ILLM and IEmbeddings interfaces",
   "type": "module",
   "main": "./dist/index.js",

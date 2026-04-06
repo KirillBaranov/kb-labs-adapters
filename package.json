@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "description": "KB Labs adapters — adapters for different platforms and services",
   "type": "module",
   "author": {

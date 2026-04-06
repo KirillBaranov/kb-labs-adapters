@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters-transport",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Transport adapters for inter-process communication (IPC, Unix Sockets)",
   "type": "module",
   "exports": {
@@ -45,5 +45,8 @@
   "engines": {
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
+  },
+  "kb": {
+    "manifest": "./dist/manifest.js"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters-eventbus-cache",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "EventBus adapter using ICache for persistent event storage",
   "type": "module",
   "main": "./dist/index.js",

@@ -1,6 +1,6 @@
 {
   "name": "@kb-labs/adapters-analytics-duckdb",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "DuckDB analytics adapter for KB Labs platform (SQL-native time-series analytics)",
   "main": "./dist/index.js",
@@ -50,5 +50,8 @@
     "node": ">=20.0.0",
     "pnpm": ">=9.0.0"
   },
-  "packageManager": "pnpm@9.11.0"
+  "packageManager": "pnpm@9.11.0",
+  "kb": {
+    "manifest": "./dist/manifest.js"
+  }
 }

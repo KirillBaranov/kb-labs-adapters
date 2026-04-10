@@ -66,7 +66,7 @@ function jwtExp(token: string): number {
 
 /** Returns true if token is absent or expires within the next 60 seconds. */
 function tokenExpired(token: string | undefined): boolean {
-  if (!token) return true;
+  if (!token) {return true;}
   return jwtExp(token) < Math.floor(Date.now() / 1000) + 60;
 }
 
@@ -127,8 +127,8 @@ export class KBLabsGatewayLLM implements ILLM {
   }
 
   private async ensureToken(): Promise<void> {
-    if (!this.kbClientId || !this.kbClientSecret) return;
-    if (!tokenExpired(this.accessToken)) return;
+    if (!this.kbClientId || !this.kbClientSecret) {return;}
+    if (!tokenExpired(this.accessToken)) {return;}
 
     this.accessToken = await refreshToken(
       this.gatewayURL,

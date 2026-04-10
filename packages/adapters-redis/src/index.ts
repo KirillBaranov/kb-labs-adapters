@@ -162,3 +162,4 @@ export function createAdapter(config?: RedisCacheConfig): RedisCacheAdapter {
 
 // Default export for direct import
 export default createAdapter;
+// test
